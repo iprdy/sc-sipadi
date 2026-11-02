@@ -13,8 +13,8 @@ export const PublicNavbar: React.FC = () => {
   const landingNavLinks = [
     { label: 'Beranda', href: '#hero' },
     { label: 'Indikator Agroklimat', href: '#indikator' },
-    { label: 'Alur Kerja', href: '#alur-kerja' },
-    { label: 'Metodologi AI', href: '#metodologi' },
+    { label: 'Alur Kerja', href: '#alur' },
+    { label: 'Metodologi AI', href: '#xai' },
     { label: 'Tentang', href: '#tentang' },
   ];
 
@@ -35,74 +35,73 @@ export const PublicNavbar: React.FC = () => {
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-[#FFFFFF]/95 backdrop-blur-md border-b border-[#D8E3CC]/80 shadow-[0_1px_8px_rgba(22,74,50,0.05)]">
-      <div className="h-20 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
-        {/* Brand Logo: ONLY Logo + App Name (SIPADI) */}
-        <Link to="/" className="flex items-center gap-3 group">
-          <div className="w-10 h-10 rounded-xl bg-[#EDF4E5] border border-[#C8DDAF] flex items-center justify-center text-[#287A4A] shadow-xs group-hover:scale-105 transition-transform">
-            <Sprout className="w-5 h-5 text-[#287A4A]" />
+    <header className="w-full">
+      <nav className="bg-white/95 backdrop-blur-md rounded-full py-2.5 px-4 sm:px-6 shadow-[0_4px_24px_rgba(20,69,47,0.12)] border border-[#D9E5D2] flex items-center justify-between gap-4">
+        {/* Brand Logo: Logo + App Name (SIPADI) */}
+        <Link to="/" className="flex items-center gap-2.5 group">
+          <div className="w-9 h-9 rounded-xl bg-[#14452F] flex items-center justify-center text-[#CFEF8A] shadow-xs group-hover:scale-105 transition-transform">
+            <Sprout className="w-5 h-5 text-[#CFEF8A]" />
           </div>
-          <span className="font-extrabold text-[22px] text-[#164A32] tracking-tight leading-none">
+          <span className="font-extrabold text-[20px] text-[#14452F] tracking-tight leading-none font-display">
             SIPADI
           </span>
         </Link>
 
-        {/* Desktop Navigation - ONLY Landing Page Sections */}
-        <nav className="hidden md:flex items-center gap-6">
+        {/* Desktop Navigation Links */}
+        <div className="hidden lg:flex items-center gap-7">
           {landingNavLinks.map((link) => (
             <a
               key={link.href}
               href={link.href}
               onClick={(e) => handleNavLinkClick(e, link.href)}
-              className="text-xs sm:text-[13px] font-semibold text-[#5F7061] hover:text-[#164A32] transition-colors"
+              className="text-[14px] font-medium text-[#1F2D26] hover:text-[#14452F] transition-colors"
             >
               {link.label}
             </a>
           ))}
-        </nav>
+        </div>
 
         {/* Action Controls & User Profile (NO "Keluar" button in header, NO Arrow icons) */}
-        <div className="hidden sm:flex items-center gap-3">
+        <div className="hidden sm:flex items-center gap-2.5">
           {isAuthenticated ? (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
               <button
                 onClick={handleDashboardClick}
-                className="px-4 py-2.5 rounded-xl bg-[#287A4A] text-white text-xs font-bold hover:bg-[#164A32] transition-all shadow-xs cursor-pointer"
+                className="inline-flex items-center justify-center min-h-[42px] px-5 rounded-full bg-[#14452F] text-white text-[13px] font-bold hover:bg-[#0E3323] transition-all shadow-xs cursor-pointer"
               >
                 <span>Buka Dashboard</span>
               </button>
 
-              {/* Profile Only (No Logout option here) */}
+              {/* Profile Pill Badge */}
               <div
                 title={`Profil Pengguna: ${user?.name}`}
-                className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-[#EDF4E5] border border-[#C8DDAF]"
+                className="inline-flex items-center gap-2 border border-[#D9E5D2] bg-[#FAF7F0] rounded-full py-1 px-3.5 pr-4 text-xs font-semibold text-[#14452F]"
               >
-                <div className="w-7 h-7 rounded-full bg-[#164A32] text-white text-[11px] font-extrabold flex items-center justify-center">
-                  {user?.avatarInitials || 'US'}
+                <div className="w-7 h-7 rounded-full bg-[#14452F] text-white text-[11px] font-extrabold flex items-center justify-center">
+                  {user?.avatarInitials || 'WS'}
                 </div>
-                <span className="text-xs font-bold text-[#164A32] max-w-[120px] truncate">
-                  {user?.name || 'Pengguna'}
+                <span className="max-w-[120px] truncate">
+                  {user?.name || 'I Wayan Sudiarta'}
                 </span>
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
               <Link
                 to="/login"
-                className="px-3.5 py-2 rounded-xl text-xs font-bold text-[#164A32] hover:bg-[#EDF4E5] transition-colors border border-[#D8E3CC] flex items-center gap-1.5"
+                className="px-4 py-2 rounded-full text-xs font-bold text-[#14452F] hover:bg-[#E3F3D3] transition-colors border border-[#D9E5D2]"
               >
-                <LogIn className="w-3.5 h-3.5" />
                 <span>Masuk</span>
               </Link>
               <Link
                 to="/register"
-                className="px-3.5 py-2 rounded-xl text-xs font-bold text-[#164A32] bg-[#FAF7F0] hover:bg-[#EDF4E5] transition-colors border border-[#D8E3CC]"
+                className="px-4 py-2 rounded-full text-xs font-bold text-[#14452F] bg-[#E3F3D3] hover:bg-[#CFEF8A] transition-colors"
               >
                 <span>Daftar</span>
               </Link>
               <button
                 onClick={handleDashboardClick}
-                className="px-4 py-2 rounded-xl bg-[#287A4A] text-white text-xs font-bold hover:bg-[#164A32] transition-all shadow-xs cursor-pointer"
+                className="inline-flex items-center justify-center min-h-[42px] px-5 rounded-full bg-[#14452F] text-white text-[13px] font-bold hover:bg-[#0E3323] transition-all shadow-xs cursor-pointer"
               >
                 <span>Buka Dashboard</span>
               </button>
@@ -113,41 +112,41 @@ export const PublicNavbar: React.FC = () => {
         {/* Mobile Hamburger Button */}
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="md:hidden p-2 rounded-xl text-[#164A32] hover:bg-[#EDF4E5] transition-colors"
+          className="lg:hidden p-2 rounded-full text-[#14452F] hover:bg-[#E3F3D3] transition-colors cursor-pointer"
           aria-label="Toggle Menu"
         >
-          {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
-      </div>
+      </nav>
 
-      {/* Mobile Drawer */}
+      {/* Mobile Menu Dropdown */}
       {mobileMenuOpen && (
-        <div className="md:hidden bg-[#FFFFFF] border-b border-[#D8E3CC] px-4 pt-3 pb-6 flex flex-col gap-3 shadow-lg">
+        <div className="lg:hidden mt-2 bg-white rounded-3xl border border-[#D9E5D2] p-4 flex flex-col gap-2 shadow-xl animate-fade-in">
           {landingNavLinks.map((link) => (
             <a
               key={link.href}
               href={link.href}
               onClick={(e) => handleNavLinkClick(e, link.href)}
-              className="text-sm font-semibold text-[#164A32] py-2 px-3 rounded-lg hover:bg-[#EDF4E5]"
+              className="text-sm font-semibold text-[#1F2D26] py-2.5 px-4 rounded-xl hover:bg-[#E3F3D3] transition-colors"
             >
               {link.label}
             </a>
           ))}
-          <div className="pt-3 border-t border-[#D8E3CC] flex flex-col gap-2">
+          <div className="pt-3 border-t border-[#D9E5D2] flex flex-col gap-2">
             {isAuthenticated ? (
               <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2 p-2 bg-[#EDF4E5] rounded-xl">
-                  <div className="w-7 h-7 rounded-full bg-[#164A32] text-white text-[11px] font-bold flex items-center justify-center">
-                    {user?.avatarInitials || 'US'}
+                <div className="flex items-center gap-2 p-2.5 bg-[#FAF7F0] border border-[#D9E5D2] rounded-full">
+                  <div className="w-7 h-7 rounded-full bg-[#14452F] text-white text-[11px] font-bold flex items-center justify-center">
+                    {user?.avatarInitials || 'WS'}
                   </div>
-                  <span className="text-xs font-bold text-[#164A32]">{user?.name}</span>
+                  <span className="text-xs font-bold text-[#14452F]">{user?.name || 'I Wayan Sudiarta'}</span>
                 </div>
                 <button
                   onClick={() => {
                     handleDashboardClick();
                     setMobileMenuOpen(false);
                   }}
-                  className="w-full text-center py-2.5 rounded-xl bg-[#287A4A] text-white font-bold text-xs"
+                  className="w-full text-center py-3 rounded-full bg-[#14452F] text-white font-bold text-xs hover:bg-[#0E3323] cursor-pointer"
                 >
                   Buka Dashboard
                 </button>
@@ -158,14 +157,14 @@ export const PublicNavbar: React.FC = () => {
                   <Link
                     to="/login"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex-1 text-center py-2.5 rounded-xl text-xs font-bold text-[#164A32] border border-[#D8E3CC]"
+                    className="flex-1 text-center py-2.5 rounded-full text-xs font-bold text-[#14452F] border border-[#D9E5D2]"
                   >
                     Masuk
                   </Link>
                   <Link
                     to="/register"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex-1 text-center py-2.5 rounded-xl text-xs font-bold text-[#164A32] bg-[#EDF4E5]"
+                    className="flex-1 text-center py-2.5 rounded-full text-xs font-bold text-[#14452F] bg-[#E3F3D3]"
                   >
                     Daftar
                   </Link>
@@ -175,7 +174,7 @@ export const PublicNavbar: React.FC = () => {
                     handleDashboardClick();
                     setMobileMenuOpen(false);
                   }}
-                  className="w-full text-center py-2.5 rounded-xl bg-[#287A4A] text-white font-bold text-xs"
+                  className="w-full text-center py-3 rounded-full bg-[#14452F] text-white font-bold text-xs hover:bg-[#0E3323] cursor-pointer"
                 >
                   Buka Dashboard
                 </button>

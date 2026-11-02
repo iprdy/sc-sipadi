@@ -1,22 +1,27 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary-dark: #164A32;
+  --color-primary-dark: #14452F;
   --color-primary-accent: #287A4A;
-  --color-brand-green: #55A85F;
+  --color-brand-green: #2E9E5B;
   --color-brand-sage: #C8DDAF;
   --color-brand-light: #EDF4E5;
-  --color-cream-bg: #F7F2E6;
+  --color-brand-lime: #CFEF8A;
+  --color-brand-lime-soft: #E3F3D3;
+  --color-forest-dark: #0E3323;
+  --color-cream-bg: #F6F2E7;
   --color-card-cream: #FAF7F0;
   --color-card-cream-light: #FBF8F1;
-  --color-telemetry-rain: #4D9FC1;
-  --color-telemetry-lst: #C4A83F;
-  --color-feature-positive: #4D9568;
+  --color-telemetry-rain: #1F5F8B;
+  --color-telemetry-lst: #8A5A00;
+  --color-feature-positive: #2E9E5B;
   --color-feature-negative: #C96F5F;
-  --color-text-primary: #164A32;
-  --color-text-muted: #5F7061;
+  --color-text-primary: #1F2D26;
+  --color-text-dark: #14452F;
+  --color-text-muted: #4A5A52;
   --color-border-subtle: #D8E3CC;
-  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Figtree', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Bricolage Grotesque', 'Figtree', sans-serif;
 }
 
 @layer base {
@@ -25,12 +30,16 @@
   }
 
   body {
-    background-color: var(--color-cream-bg);
-    color: var(--color-text-primary);
+    background-color: #F6F2E7;
+    color: #1F2D26;
     font-family: var(--font-sans);
     margin: 0;
     padding: 0;
     scroll-behavior: smooth;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
   }
 }
 
@@ -41,14 +50,30 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #F7F2E6;
+  background: #F4F2EC;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #C8DDAF;
+  background: #C2D6BA;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: #287A4A;
 }
+
+/* Subtle Minimalist Animations */
+@keyframes float-gentle {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.animate-float-gentle {
+  animation: float-gentle 4s ease-in-out infinite;
+}
+
+
