@@ -1,12 +1,39 @@
+# Dependencies & Package Managers
 node_modules/
 .pnp
 .pnp.js
 
+# Build Outputs
 dist/
 dist-ssr/
 build/
 *.tsbuildinfo
 
+# Python & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Machine Learning Artifacts & Uploaded Datasets
+backend/artifacts/*
+!backend/artifacts/.gitkeep
+*.joblib
+
+# Databases & SQLite
+*.db
+*.sqlite
+*.sqlite3
+backend/*.db
+
+# Environment Variables & Secrets
 .env
 .env.local
 .env.development.local
@@ -15,7 +42,22 @@ build/
 *.env
 *.env.*
 !.env.example
+backend/.env
 
+# Tunneling Tools & Local Binaries
+ngrok.exe
+ngrok.cmd
+.ngrok*
+cloudflared.exe
+
+# Large Archive Files & Legacy Backups
+*.zip
+*.tar.gz
+*.rar
+*.7z
+/sc-sipadi/
+
+# Logs
 logs/
 *.log
 npm-debug.log*
@@ -24,6 +66,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# IDE & Editor Files
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
@@ -34,44 +77,15 @@ lerna-debug.log*
 *.sln
 *.sw?
 
+# OS Generated Files
 .DS_Store
 Thumbs.db
 ehthumbs.db
 Desktop.ini
 
+# Temporary Files
 .temp/
 .tmp/
 temp/
 tmp/
 temp-vite/
-
-__pycache__/
-*.py[cod]
-*$py.class
-.venv/
-venv/
-env/
-.pytest_cache/
-.coverage
-
-
-.DS_Store
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-
-.temp/
-.tmp/
-temp/
-tmp/
-temp-vite/
-
-__pycache__/
-*.py[cod]
-*$py.class
-.venv/
-venv/
-env/
-.pytest_cache/
-.coverage
-

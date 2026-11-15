@@ -13,6 +13,7 @@ import { AnalysisPage } from './pages/AnalysisPage';
 import { InsightPage } from './pages/InsightPage';
 import { PredictionModelPage } from './pages/PredictionModelPage';
 import { AboutPage } from './pages/AboutPage';
+import { AdminPage } from './pages/AdminPage';
 
 export function App() {
   return (
@@ -33,6 +34,7 @@ export function App() {
               <Route path="analysis" element={<AnalysisPage />} />
               <Route path="insight" element={<InsightPage />} />
               <Route path="prediction-model" element={<PredictionModelPage />} />
+              <Route path="admin" element={<AdminPage />} />
               <Route path="about" element={<AboutPage />} />
             </Route>
 

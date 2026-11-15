@@ -20,7 +20,7 @@ export const AnalysisPage: React.FC = () => {
 
     Promise.all([
       apiService.getShapData(selectedRegion, selectedYear),
-      apiService.getAleData(activeAleFeature),
+      apiService.getAleData(activeAleFeature, selectedRegion, selectedYear),
     ]).then(([shapRes, aleRes]) => {
       if (isMounted) {
         setShapData(shapRes);

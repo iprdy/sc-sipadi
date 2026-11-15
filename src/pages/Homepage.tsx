@@ -1051,7 +1051,7 @@ export const Homepage: React.FC = () => {
                 onClick={handleDashboardAction}
                 className="inline-flex items-center justify-center min-h-[48px] px-8 rounded-full bg-[#CFEF8A] text-[#0E3323] font-bold text-sm hover:bg-white hover:shadow-md transition-all duration-200 cursor-pointer shadow-xs"
               >
-                <span>Buka Dashboard</span>
+                <span>{isAuthenticated ? 'Buka Dashboard' : 'Masuk ke Dashboard'}</span>
               </button>
             </div>
           </AnimatedReveal>

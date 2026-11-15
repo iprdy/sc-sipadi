@@ -8,7 +8,8 @@ import {
   Lightbulb, 
   Info, 
   LogOut, 
-  Home
+  Home,
+  UploadCloud
 } from 'lucide-react';
 
 interface AppSidebarProps {
@@ -36,6 +37,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     navigate('/');
   };
 
+  const isAdmin = user?.role === 'admin' || user?.role === 'Administrator' || user?.email === 'admin@sipadi.id';
+
   const navItems: NavItem[] = [
     {
       label: 'Monitoring',
@@ -55,6 +58,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       icon: Lightbulb,
       desc: 'Petak Sawah & Spasial',
     },
+    ...(isAdmin ? [{
+      label: 'Upload Data',
+      path: '/dashboard/admin',
+      icon: UploadCloud,
+      desc: 'Upload & Pelatihan Model',
+      highlight: true,
+    }] : []),
     {
       label: 'Tentang Sistem',
       path: '/dashboard/about',

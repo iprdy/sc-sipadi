@@ -8,4 +8,15 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  server: {
+    host: true, // Izinkan akses dari jaringan lokal (Wi-Fi)
+    port: 5173,
+    allowedHosts: true, // Izinkan akses via tunneling (ngrok, cloudflared, localtunnel)
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+    },
+  },
 })

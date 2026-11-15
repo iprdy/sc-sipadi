@@ -41,7 +41,7 @@ export const ProductivityTrendChart: React.FC<ProductivityTrendChartProps> = ({ 
             axisLine={{ stroke: '#D8E3CC' }}
           />
           <YAxis
-            domain={[3.5, 6.0]}
+            domain={['auto', 'auto']}
             stroke="#5F7061"
             fontSize={12}
             tickLine={false}

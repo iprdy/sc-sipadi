@@ -1,6 +1,15 @@
 // SIPADI Core Type Definitions
 
-export type RegionId = 'tabanan' | 'badung' | 'gianyar' | 'buleleng';
+export type RegionId = 
+  | 'tabanan' 
+  | 'badung' 
+  | 'gianyar' 
+  | 'buleleng' 
+  | 'bangli' 
+  | 'jembrana' 
+  | 'karangasem' 
+  | 'klungkung' 
+  | 'denpasar';
 
 export interface RegionOption {
   id: RegionId;
@@ -132,7 +141,7 @@ export interface UserProfile {
   id: string;
   name: string;
   email: string;
-  role: 'Penyuluh Pertanian' | 'Peneliti' | 'Petani Lahan' | 'Demo User';
+  role: 'admin' | 'user' | 'Penyuluh Pertanian' | 'Peneliti' | 'Petani Lahan' | 'Demo User' | string;
   avatarInitials: string;
 }
 

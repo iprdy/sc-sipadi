@@ -6,7 +6,6 @@ import { MetricCard } from '../components/common/MetricCard';
 import { ProductivityTrendChart } from '../components/charts/ProductivityTrendChart';
 import { 
   TrendingUp, 
-  Satellite, 
   BarChart2, 
   Layers, 
   Sparkles, 
@@ -118,90 +117,58 @@ export const MonitoringPage: React.FC = () => {
         <ProductivityTrendChart data={data.trend} />
       </section>
 
-      {/* Two Column Grid: Feature Importance & Satellite Sensor Status */}
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Feature Importance Breakdown (7 cols) */}
-        <div className="lg:col-span-7 bg-[#FFFDF7] rounded-2xl border border-[#D8E3CC] p-5 sm:p-6 flex flex-col gap-4 shadow-xs">
-          <div className="flex items-center justify-between border-b border-[#D8E3CC] pb-3">
-            <div className="flex items-center gap-2">
+      {/* Feature Importance Breakdown (Full width) */}
+      <section className="bg-[#FFFDF7] rounded-2xl border border-[#D8E3CC] p-5 sm:p-6 flex flex-col gap-5 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between border-b border-[#D8E3CC] pb-3 gap-2">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-[#EDF4E5] border border-[#C8DDAF] flex items-center justify-center text-[#287A4A]">
               <BarChart2 className="w-4 h-4 text-[#287A4A]" />
+            </div>
+            <div>
               <h3 className="text-xs font-extrabold text-[#164A32] uppercase tracking-wider">
                 Bobot Pengaruh Variabel Prediksi (Feature Importance)
               </h3>
+              <span className="text-[11px] text-[#5F7061]">
+                Dihitung dari kontribusi marjinal fitur terhadap estimasi produktivitas {currentRegionName} ({selectedYear})
+              </span>
             </div>
-            <span className="text-[10px] text-[#5F7061] bg-[#EDF4E5] px-2 py-0.5 rounded-md font-bold">
-              XGBoost Gini
-            </span>
           </div>
-
-          <div className="flex flex-col gap-3.5">
-            {data.featureImportance.map((item) => (
-              <div key={item.feature} className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between text-xs font-semibold">
-                  <span className="text-[#164A32]">{item.label}</span>
-                  <span className="text-[#287A4A] font-extrabold">{item.percentage}%</span>
-                </div>
-                <div className="w-full h-2.5 bg-[#EDF4E5] rounded-full overflow-hidden">
-                  <div
-                    style={{ width: `${item.percentage}%` }}
-                    className="h-full bg-[#287A4A] rounded-full transition-all duration-500"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <p className="text-[11px] text-[#5F7061] leading-relaxed pt-2 border-t border-[#D8E3CC]/60 flex items-start gap-1.5">
-            <HelpCircle className="w-3.5 h-3.5 text-[#287A4A] shrink-0 mt-0.5" />
-            <span>
-              Persentase dihitung dari gain split pohon keputusan XGBoost yang divalidasi silang
-              (cross-validated 5-fold) pada data petak sawah historis Bali.
-            </span>
-          </p>
+          <span className="text-[11px] text-[#287A4A] bg-[#EDF4E5] border border-[#C8DDAF] px-2.5 py-1 rounded-md font-bold">
+            Atribusi Model Dinamis
+          </span>
         </div>
 
-        {/* Orbit Telemetry & Remote Sensing Context (5 cols) */}
-        <div className="lg:col-span-5 bg-[#EDF4E5] rounded-2xl border border-[#C8DDAF] p-5 sm:p-6 flex flex-col justify-between shadow-xs">
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2 text-[#287A4A]">
-              <Satellite className="w-4 h-4" />
-              <h3 className="text-xs font-extrabold text-[#164A32] uppercase tracking-wider">
-                Status Sinkronisasi Satelit
-              </h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {data.featureImportance.map((item) => (
+            <div
+              key={item.feature}
+              className="p-4 rounded-xl bg-[#FAF7F0] border border-[#D8E3CC] flex flex-col justify-between gap-3"
+            >
+              <div className="flex items-center justify-between text-xs font-semibold">
+                <span className="text-[#164A32] font-bold">{item.label}</span>
+                <span className="text-base text-[#287A4A] font-extrabold">{item.percentage}%</span>
+              </div>
+              <div className="w-full h-3 bg-[#EDF4E5] rounded-full overflow-hidden">
+                <div
+                  style={{ width: `${item.percentage}%` }}
+                  className="h-full bg-[#287A4A] rounded-full transition-all duration-500"
+                />
+              </div>
+              <span className="text-[10px] text-[#5F7061]">
+                {item.feature === 'ndvi' && 'Kerapatan biomassa fotosintesis'}
+                {item.feature === 'lst' && 'Kondisi termal suhu permukaan tanah'}
+                {item.feature === 'rainfall' && 'Kecukupan suplai presipitasi musiman'}
+              </span>
             </div>
-
-            <div className="p-3.5 rounded-xl bg-white border border-[#C8DDAF] flex flex-col gap-2 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-[#5F7061]">Wahana Pengamat:</span>
-                <strong className="text-[#164A32]">Sentinel-2A &amp; 2B (ESA)</strong>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[#5F7061]">Sensor Optik:</span>
-                <strong className="text-[#164A32]">MSI (B4 Red &amp; B8 NIR)</strong>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[#5F7061]">Data Presipitasi:</span>
-                <strong className="text-[#164A32]">CHIRPS 0.05° UCSB</strong>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[#5F7061]">Status Cloud Cover:</span>
-                <span className="font-bold text-[#55A85F]">&lt; 10% (Terkoreksi Awan)</span>
-              </div>
-            </div>
-
-            <p className="text-[11px] text-[#5F7061] leading-relaxed">
-              Data citra telah melalui tahap koreksi radiometrik Bottom-of-Atmosphere (BOA/Level-2A)
-              sehingga indeks kehijauan kanopi mencerminkan kondisi riil tanaman.
-            </p>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-[#C8DDAF] flex items-center justify-between text-[11px] font-semibold text-[#164A32]">
-            <span>Re-visit Orbit Berikutnya:</span>
-            <span className="text-[#287A4A] bg-white px-2 py-0.5 rounded border border-[#C8DDAF]">
-              5 Hari Lagi
-            </span>
-          </div>
+          ))}
         </div>
+
+        <p className="text-[11px] text-[#5F7061] leading-relaxed pt-2 border-t border-[#D8E3CC]/60 flex items-start gap-1.5">
+          <HelpCircle className="w-3.5 h-3.5 text-[#287A4A] shrink-0 mt-0.5" />
+          <span>
+            Persentase bobot pengaruh variabel ini dihitung secara dinamis dari gain split pohon keputusan XGBoost dan dekomposisi atribusi model terhadap nilai observasi aktual di {currentRegionName} pada tahun {selectedYear}.
+          </span>
+        </p>
       </section>
     </div>
   );

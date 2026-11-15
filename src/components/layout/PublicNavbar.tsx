@@ -61,7 +61,7 @@ export const PublicNavbar: React.FC = () => {
           ))}
         </div>
 
-        {/* Action Controls & User Profile (NO "Keluar" button in header, NO Arrow icons) */}
+        {/* Action Controls & User Profile (When not logged in: only Masuk & Daftar. When logged in: Buka Dashboard + User Avatar & Name) */}
         <div className="hidden sm:flex items-center gap-2.5">
           {isAuthenticated ? (
             <div className="flex items-center gap-2.5">
@@ -72,39 +72,38 @@ export const PublicNavbar: React.FC = () => {
                 <span>Buka Dashboard</span>
               </button>
 
-              {/* Profile Pill Badge */}
+              {/* Profile Pill Badge: User Logo & Name */}
               <div
-                title={`Profil Pengguna: ${user?.name}`}
-                className="inline-flex items-center gap-2 border border-[#D9E5D2] bg-[#FAF7F0] rounded-full py-1 px-3.5 pr-4 text-xs font-semibold text-[#14452F]"
+                title={`Profil Pengguna: ${user?.name} (${user?.role})`}
+                className="inline-flex items-center gap-2.5 border border-[#D9E5D2] bg-[#FAF7F0] rounded-full py-1 px-3.5 pr-4 text-xs font-semibold text-[#14452F]"
               >
-                <div className="w-7 h-7 rounded-full bg-[#14452F] text-white text-[11px] font-extrabold flex items-center justify-center">
-                  {user?.avatarInitials || 'WS'}
+                <div className="w-7 h-7 rounded-full bg-[#14452F] text-[#CFEF8A] text-[11px] font-black flex items-center justify-center shadow-xs">
+                  {user?.avatarInitials || (user?.role === 'admin' ? 'AD' : 'WS')}
                 </div>
-                <span className="max-w-[120px] truncate">
-                  {user?.name || 'I Wayan Sudiarta'}
-                </span>
+                <div className="flex flex-col text-left leading-tight">
+                  <span className="max-w-[130px] truncate font-bold text-[12px]">
+                    {user?.name || (user?.role === 'admin' ? 'Administrator' : 'I Wayan Sudiarta')}
+                  </span>
+                  <span className="text-[10px] text-[#55695D] font-medium uppercase tracking-wider">
+                    {user?.role === 'admin' ? 'Admin' : 'Pengguna'}
+                  </span>
+                </div>
               </div>
             </div>
           ) : (
             <div className="flex items-center gap-2">
               <Link
                 to="/login"
-                className="px-4 py-2 rounded-full text-xs font-bold text-[#14452F] hover:bg-[#E3F3D3] transition-colors border border-[#D9E5D2]"
+                className="px-5 py-2 rounded-full text-xs font-bold text-[#14452F] hover:bg-[#E3F3D3] transition-colors border border-[#D9E5D2]"
               >
                 <span>Masuk</span>
               </Link>
               <Link
                 to="/register"
-                className="px-4 py-2 rounded-full text-xs font-bold text-[#14452F] bg-[#E3F3D3] hover:bg-[#CFEF8A] transition-colors"
+                className="px-5 py-2 rounded-full text-xs font-bold text-[#14452F] bg-[#CFEF8A] hover:bg-[#bde46e] transition-colors"
               >
                 <span>Daftar</span>
               </Link>
-              <button
-                onClick={handleDashboardClick}
-                className="inline-flex items-center justify-center min-h-[42px] px-5 rounded-full bg-[#14452F] text-white text-[13px] font-bold hover:bg-[#0E3323] transition-all shadow-xs cursor-pointer"
-              >
-                <span>Buka Dashboard</span>
-              </button>
             </div>
           )}
         </div>
@@ -164,20 +163,11 @@ export const PublicNavbar: React.FC = () => {
                   <Link
                     to="/register"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex-1 text-center py-2.5 rounded-full text-xs font-bold text-[#14452F] bg-[#E3F3D3]"
+                    className="flex-1 text-center py-2.5 rounded-full text-xs font-bold text-[#14452F] bg-[#CFEF8A]"
                   >
                     Daftar
                   </Link>
                 </div>
-                <button
-                  onClick={() => {
-                    handleDashboardClick();
-                    setMobileMenuOpen(false);
-                  }}
-                  className="w-full text-center py-3 rounded-full bg-[#14452F] text-white font-bold text-xs hover:bg-[#0E3323] cursor-pointer"
-                >
-                  Buka Dashboard
-                </button>
               </div>
             )}
           </div>

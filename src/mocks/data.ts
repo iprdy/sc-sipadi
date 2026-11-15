@@ -23,6 +23,11 @@ export const AVAILABLE_REGIONS: RegionOption[] = [
   { id: 'badung', name: 'Badung', totalFields: 119, totalAreaHa: 9800 },
   { id: 'gianyar', name: 'Gianyar', totalFields: 142, totalAreaHa: 13200 },
   { id: 'buleleng', name: 'Buleleng', totalFields: 164, totalAreaHa: 17400 },
+  { id: 'bangli', name: 'Bangli', totalFields: 88, totalAreaHa: 6200 },
+  { id: 'jembrana', name: 'Jembrana', totalFields: 104, totalAreaHa: 11500 },
+  { id: 'karangasem', name: 'Karangasem', totalFields: 96, totalAreaHa: 8900 },
+  { id: 'klungkung', name: 'Klungkung', totalFields: 62, totalAreaHa: 4300 },
+  { id: 'denpasar', name: 'Kota Denpasar', totalFields: 45, totalAreaHa: 2400 },
 ];
 
 export const AVAILABLE_YEARS = [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025] as const;

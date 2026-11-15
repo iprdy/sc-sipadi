@@ -1,25 +1,21 @@
-# Product Requirements Document (PRD) — SIPADI Frontend
+# Product Requirements Document (PRD) — Sistem Terintegrasi SIPADI (Full-Stack & ML Pipeline)
 
-**Versi:** 2.0  
-**Fokus:** Implementasi antarmuka frontend (UI)  
-**Status:** Spesifikasi implementasi frontend; backend belum diimplementasikan
+**Versi:** 3.0  
+**Fokus:** Arsitektur Sistem Terintegrasi End-to-End (Frontend UI, Backend FastAPI, Machine Learning XGBoost vs Random Forest, XAI SHAP & ALE, PostgreSQL, dan Model Storage)  
+**Status:** Integrasi Full-Stack & Otomasi Pipeline Machine Learning
 
 ---
 
 ## 1. Ringkasan
 
-SIPADI adalah antarmuka web untuk memantau produktivitas padi dan memahami faktor lingkungan yang berkaitan dengan hasil prediksi. Implementasi pada tahap ini **berfokus pada frontend saja**: membangun halaman, komponen UI, navigasi, formulir, visualisasi, serta interaksi antarmuka agar tampilannya dapat digunakan dan nantinya mudah dihubungkan ke backend.
+SIPADI (Sistem Pemantauan dan Analisis Produktivitas Padi Berbasis AI) adalah platform analitik terintegrasi untuk memantau produktivitas padi, memprediksi hasil panen berbasis data penginderaan jauh dan agroklimat, serta menjelaskan faktor-faktor lingkungan yang memengaruhi estimasi menggunakan pendekatan Explainable Artificial Intelligence (XAI).
 
-Frontend akan mengikuti empat halaman utama pada desain referensi:
-
-1. **Homepage** — halaman publik yang memperkenalkan SIPADI.
-2. **Monitoring Produktivitas** — ringkasan indikator lingkungan dan tren produktivitas.
-3. **Explainable Analysis** — visualisasi kontribusi SHAP dan pola respons ALE.
-4. **Insight Produktivitas** — ringkasan hasil prediksi dan interpretasinya.
-
-Sistem juga memiliki halaman **Login** dan **Register**. Pengunjung boleh membuka Homepage tanpa akun, tetapi dashboard dirancang untuk diakses setelah login.
-
-Pada tahap ini, proses autentikasi dan data dashboard boleh menggunakan **mock data atau simulasi frontend**. Tidak perlu membangun backend, database, pipeline data, model machine learning, atau layanan autentikasi sungguhan. Struktur frontend harus disiapkan agar integrasi backend dapat dilakukan kemudian tanpa perlu membangun ulang UI.
+Sistem berevolusi dari prototipe antarmuka frontend (v2.0) menjadi **sistem end-to-end terintegrasi penuh (v3.0)** yang mencakup:
+1. **Frontend Interaktif (React + Vite + Tailwind CSS):** Antarmuka publik (Homepage) dan dashboard pengguna (Monitoring Produktivitas, Explainable Analysis, Insight Spasial, Simulasi Prediksi Kustom, serta Admin Dataset & Model).
+2. **Backend API (FastAPI):** Layanan backend Python berkinerja tinggi untuk autentikasi admin, penerimaan dataset tabular, orkestrasi pelatihan model, komputasi metrik evaluasi, serta inferensi waktu-nyata (real-time).
+3. **Automated Machine Learning Engine:** Validasi data input, prapemrosesan otomatis, dual-training paralel regresi **XGBoost** dan **Random Forest**, komparasi metrik ($R^2$, $RMSE$, $MAE$), serta seleksi model terbaik secara otonom.
+4. **Explainable AI (XAI) Engine:** Ekstraksi atribusi fitur global/lokal menggunakan **SHAP (TreeExplainer)** dan analisis isolasi pengaruh nonlinier menggunakan **ALE (Accumulated Local Effects)**.
+5. **Persistence Layer:** Penyimpanan terstruktur metadata dan hasil analisis menggunakan **PostgreSQL**, serta penyimpanan biner model serial (`.joblib`) pada media penyimpanan model (*Model Storage*).
 
 ## 2. Tujuan
 
@@ -33,35 +29,33 @@ Pada tahap ini, proses autentikasi dan data dashboard boleh menggunakan **mock d
 
 ## 3. Batasan Ruang Lingkup
 
-### 3.1 Termasuk dalam tahap ini
+### 3.1 Termasuk dalam Lingkup Sistem Terintegrasi (v3.0)
 
-- Implementasi seluruh halaman dan layout frontend.
-- Responsive layout untuk desktop, tablet, dan mobile.
-- Navigasi antarhalaman.
-- UI Login dan Register beserta validasi formulir di sisi klien.
-- Simulasi alur login/logout di frontend untuk kebutuhan demo.
-- Simulasi proteksi route berdasarkan status login di frontend.
-- Mock data untuk seluruh kartu, grafik, indikator, dan ringkasan.
-- Filter wilayah dan tahun yang memperbarui tampilan menggunakan mock data.
-- Interaksi tab fitur, tooltip, menu, tombol ekspor simulasi, dan kontrol grafik.
-- Komponen loading, empty state, error state, dan data simulasi bila diperlukan.
-- Dokumentasi struktur komponen serta titik integrasi API yang akan digunakan nanti.
+- **Frontend & Visualisasi:**
+  - Implementasi seluruh halaman dan layout frontend (Homepage, Monitoring, Analysis, Insight, Prediction Model, Admin, About, Login, Register).
+  - Responsive layout untuk desktop, tablet, dan mobile.
+  - Komponen peta lahan interaktif, grafik tren, grafik kontribusi SHAP, dan kurva efek ALE.
+  - Halaman Admin Dataset (`/dashboard/admin`) untuk mengunggah CSV/Excel, memantau metrik komparasi model, dan mempublikasikan hasil.
+  - Lapisan abstraksi API (`apiService.ts`) dengan kemampuan beralih otomatis antara live API FastAPI dan fallback mock data.
+- **Backend & Otomasi Machine Learning (FastAPI):**
+  - Autentikasi dan otorisasi Admin Login via API.
+  - Endpoint penerimaan dataset tabular CSV/Excel (`/api/admin/datasets/upload`).
+  - Mesin validasi skema dan rentang batas data fisik (NDVI, LST, Curah Hujan, Produktivitas).
+  - Prapemrosesan data (imputasi missing values, koersi numerik).
+  - Pembagian dataset (Train/Test Split 80:20).
+  - Pelatihan model paralel: **XGBoost Regressor** dan **Random Forest Regressor**.
+  - Evaluasi metrik komparatif: Koefisien Determinasi ($R^2$), Root Mean Squared Error ($RMSE$), dan Mean Absolute Error ($MAE$).
+  - Seleksi otomatis model terbaik berdasarkan performa $R^2$ pengujian tertinggi.
+  - Pipeline Explainable AI: kalkulasi nilai atribusi kepentingan fitur via **SHAP** dan kurva respons isolasi nonlinier via **ALE**.
+  - Endpoint penyajian inferensi prediksi kustom (`POST /api/predict`).
+  - Endpoint riwayat dan status model terkini (`GET /api/runs/latest`, `GET /api/runs/{run_id}`).
+- **Penyimpanan Data (Persistence Layer):**
+  - Basis data relasional **PostgreSQL** untuk menyimpan metadata pelatihan, log metrik, riwayat upload, dan akun pengguna.
+  - Penyimpanan berkas model serial (*Model Storage*) biner `.joblib`.
 
-### 3.2 Tidak termasuk dalam tahap ini
-
-- Backend/API yang sebenarnya.
-- Database dan penyimpanan akun.
-- Autentikasi sungguhan, hashing kata sandi, pengelolaan token/sesi di server, atau verifikasi email.
-- Fitur pemulihan kata sandi yang mengirim email sungguhan.
-- Pengambilan data satelit, cuaca, curah hujan, atau produktivitas dari sumber eksternal.
-- Pemrosesan dan harmonisasi data spasial.
-- Pelatihan atau inferensi model machine learning.
-- Perhitungan SHAP atau ALE secara langsung.
-- Penyimpanan permanen data pengguna.
-- Sistem role/permission backend.
-- Pengiriman laporan ke layanan eksternal.
-
-**Catatan penting:** status login dan proteksi route pada tahap frontend hanya untuk demonstrasi alur UI, bukan keamanan sesungguhnya. Perlindungan akses yang aman harus diterapkan kembali di backend ketika backend dikembangkan.
+### 3.2 Di luar Ruang Lingkup Saat Ini
+- Pemrosesan data mentah citra satelit langsung (GEE raster ingestion on-the-fly) — input data ke sistem difokuskan pada dataset tabular CSV/Excel yang telah diekstraksi.
+- Pengiriman notifikasi SMS/WhatsApp massal ke kelompok tani di luar platform web.
 
 ## 4. Target Pengguna
 
@@ -74,15 +68,17 @@ Pada tahap ini, proses autentikasi dan data dashboard boleh menggunakan **mock d
 
 ## 5. Peta Halaman dan Navigasi
 
-| Halaman | URL yang disarankan | Akses UI |
-|---|---|---|
-| Homepage | `/` | Publik |
-| Login | `/login` | Publik |
-| Register | `/register` | Publik |
-| Monitoring | `/dashboard/monitoring` | Simulasi login diperlukan |
-| Explainable Analysis | `/dashboard/analysis` | Simulasi login diperlukan |
-| Insight Produktivitas | `/dashboard/insight` | Simulasi login diperlukan |
-| Tentang Sistem | `/dashboard/about` atau `/about` | Tentukan berdasarkan desain akhir |
+| Halaman | URL yang disarankan | Akses UI | Peran Utama |
+|---|---|---|---|
+| Homepage | `/` | Publik | Edukasi publik, landing page, dan akses login |
+| Login | `/login` | Publik / Admin | Otentikasi pengguna & kredensial administrator |
+| Register | `/register` | Publik | Pendaftaran akun baru |
+| Monitoring | `/dashboard/monitoring` | Login diperlukan | Analitik spasial agroklimat dan tren produktivitas |
+| Explainable Analysis | `/dashboard/analysis` | Login diperlukan | Interpretasi kontribusi fitur (SHAP) dan isolasi efek (ALE) |
+| Insight Produktivitas | `/dashboard/insight` | Login diperlukan | Peta lahan spasial dan estimasi produktivitas per wilayah |
+| Simulasi Prediksi | `/dashboard/prediction-model` | Login diperlukan | Pengujian parameter kustom ke model ML aktif |
+| Admin Dataset | `/dashboard/admin` | Khusus Admin | Upload CSV/Excel, trigger training ML, seleksi model, dan XAI |
+| Tentang Sistem | `/dashboard/about` atau `/about` | Login / Publik | Metodologi AI, sumber data, dan profil tim pengembang |
 
 Nama URL dapat disesuaikan dengan framework, tetapi struktur navigasi sebaiknya konsisten.
 
@@ -701,28 +697,197 @@ State ini akan memudahkan penggantian mock data dengan API tanpa perlu merombak 
 
 ---
 
-## 21. Keputusan Implementasi yang Perlu Ditentukan
+---
 
-Keputusan berikut berhubungan dengan frontend dan dapat dipilih sebelum atau saat implementasi:
+## 21. Arsitektur Sistem Terintegrasi End-to-End
 
-- Framework frontend dan routing yang digunakan.
-- Library grafik yang dipakai.
-- Library peta yang digunakan atau apakah peta cukup berupa ilustrasi SVG.
-- Apakah Homepage memakai gambar statis atau ilustrasi lokal.
-- Apakah data demo ditandai dengan badge “Demo” atau “Data Ilustrasi”.
-- Aturan simulasi login yang digunakan untuk presentasi.
-- Apakah filter global dipertahankan antarhalaman.
-- Format dan perilaku tombol ekspor simulasi.
-- Target browser dan breakpoint responsive.
+Arsitektur sistem dibangun secara ketat mengikuti alur kerja pemrosesan data, pelatihan model ganda, evaluasi komparatif, analisis keberterimaan AI (XAI), hingga penyajian pada Dashboard SIPADI:
 
-Detail backend seperti database, algoritma autentikasi produksi, sumber data satelit, pipeline pemrosesan, dan deployment API **tidak perlu diputuskan untuk menyelesaikan tahap UI ini**.
+```mermaid
+flowchart TD
+    A["Admin Login"] --> B["Upload Dataset CSV / Excel"]
+    B --> C1["LST"]
+    B --> C2["NDVI"]
+    B --> C3["Rainfall"]
+    C1 --> D["FastAPI Dataset API"]
+    C2 --> D
+    C3 --> D
+    D --> E["Validasi Dataset"]
+    E --> F["Data Preprocessing"]
+    F --> G["Split Training dan Testing"]
+    G --> H1["Training XGBoost"]
+    G --> H2["Training Random Forest"]
+    H1 --> I["Model Evaluation"]
+    H2 --> I
+    I --> J["Perbandingan R², RMSE, MAE"]
+    J --> K["Pemilihan Model Terbaik"]
+    K --> L1["SHAP Analysis"]
+    K --> L2["ALE Analysis"]
+    L1 --> M["Simpan Model dan Hasil Analisis"]
+    L2 --> M
+    M --> N["PostgreSQL dan Model Storage"]
+    N --> O["Dashboard SIPADI"]
+```
+
+### 21.1 Tahapan Pemrosesan Alur Kerja:
+
+1. **Admin Login:** Otentikasi dan otorisasi sesi administrator sebelum hak unggah dataset dan pemicuan pelatihan model dibuka.
+2. **Upload Dataset CSV / Excel:** Admin mengunggah dataset tabular multi-dimensi yang memuat fitur utama:
+   - **LST (Land Surface Temperature):** Suhu radiometrik permukaan tanah dari citra thermal satelit.
+   - **NDVI (Normalized Difference Vegetation Index):** Indeks kehijauan dan kerapatan kanopi tanaman padi.
+   - **Rainfall:** Akumulasi curah hujan bulanan/musiman (mm).
+   - **Produktivitas:** Variabel target hasil panen aktual (kuintal/ha).
+3. **FastAPI Dataset API:** Pintu gerbang API menerima berkas via multipart form upload, memverifikasi MIME-type, dan mengonversi data ke DataFrame pandas.
+4. **Validasi Dataset:** Memastikan skema kolom terpenuhi (target dan fitur pendukung), mendeteksi tipe data non-numerik, memvalidasi rentang fisik nilai (NDVI antara $-1.0$ dan $1.0$, LST dalam rentang normal pertanian, Curah Hujan $\ge 0$), serta memastikan batas minimum baris valid terpenuhi.
+5. **Data Preprocessing:** Imputasi nilai hilang (*missing values*) secara cermat, pembersihan nilai tak berhingga (*infinite values*), koersi tipe data numerik, serta normalisasi penamaan variabel fitur.
+6. **Split Training dan Testing:** Pembagian data proporsional (80% data latih / 20% data uji) dengan penguncian seed acak (*random state*) untuk menjamin reproduktibilitas hasil evaluasi.
+7. **Dual Model Training (Paralel):**
+   - **XGBoost Regressor:** Algoritma berbasis Extreme Gradient Boosting yang mengoptimalkan fungsi tujuan secara bertahap dengan regularisasi.
+   - **Random Forest Regressor:** Algoritma ensemble pohon keputusan yang menggunakan metode *bootstrap aggregating* (bagging) untuk mengurangi varians.
+8. **Model Evaluation:** Pengujian performa inferensi kedua model pada subset data testing yang independen.
+9. **Perbandingan Metrik Evaluasi:** Menghitung tiga metrik utama regresi:
+   - Koefisien Determinasi ($R^2$): Proporsi varians target yang mampu dijelaskan model.
+   - Root Mean Squared Error ($RMSE$): Penalti kuadratik kesalahan prediksi dalam satuan kuintal/ha.
+   - Mean Absolute Error ($MAE$): Rata-rata absolut deviasi kesalahan prediksi.
+10. **Pemilihan Model Terbaik:** Sistem membandingkan nilai $R^2$ pengujian; model dengan nilai $R^2$ tertinggi terpilih sebagai model juara (*best production model*).
+11. **Explainable AI Pipeline:**
+    - **SHAP Analysis:** Menggunakan algoritma `shap.TreeExplainer` untuk menghitung nilai atribusi marjinal Shapley pada seluruh baris data sampel.
+    - **ALE (Accumulated Local Effects) Analysis:** Menghitung kurva pengaruh murni fitur terhadap prediksi dengan membagi distribusi variabel menjadi beberapa kuantil (*quantile bins*), mengisolasi efek tanpa bias korelasi antarfitur.
+12. **Simpan Model dan Hasil Analisis:** Menyimpan biner model terlatih (`.joblib`) bersama skema fitur dan metadata waktu pembuatan.
+13. **PostgreSQL dan Model Storage:**
+    - **PostgreSQL:** Menyimpan metadata riwayat pelatihan (`training_runs`), metrik evaluasi komparatif, nilai SHAP fitur, data kurva titik ALE, serta catatan pengguna/admin.
+    - **Model Storage:** Direktori penyimpanan aman atau media penyimpanan objek untuk berkas model serial (`.joblib`).
+14. **Dashboard SIPADI:** Frontend web mengonsumsi API FastAPI untuk menyajikan metrik terkini, grafik SHAP waterfall/importance, kurva respons ALE, simulasi prediksi kustom, dan agregasi data spasial wilayah.
 
 ---
 
-## 22. Kesimpulan
+## 22. Spesifikasi Backend FastAPI & Kontrak API
 
-PRD ini secara khusus mendefinisikan **implementasi frontend SIPADI**, bukan pembangunan sistem end-to-end. Fokus pengerjaan adalah menghasilkan UI yang lengkap, konsisten, interaktif, responsif, dan siap dipasangkan dengan backend di tahap berikutnya.
+Backend dikembangkan menggunakan Python 3.10+ dengan framework FastAPI dan Uvicorn.
 
-Login dan Register tetap dibuat sebagai bagian dari pengalaman pengguna, tetapi prosesnya hanya berupa simulasi frontend. Data Monitoring, SHAP, ALE, dan Insight menggunakan mock data. Tidak ada backend, database, pemrosesan data satelit, maupun perhitungan machine learning yang dibangun dalam tahap ini.
+### 22.1 Struktur Endpoint API
 
-Prinsip utama implementasi adalah memisahkan UI dari sumber data melalui mock/service layer dan tipe data yang jelas. Dengan demikian, saat backend tersedia, integrasi dapat dilakukan dengan mengganti sumber data dan mekanisme autentikasi tanpa harus membangun ulang seluruh antarmuka.
+| Endpoint | Metode | Akses | Deskripsi & Respons |
+|---|---|---|---|
+| `/api/auth/login` | `POST` | Publik | Otentikasi admin, mengembalikan JWT Bearer token |
+| `/api/admin/datasets/upload` | `POST` | Admin | Unggah CSV/Excel, validasi, latih XGBoost & RF, hitung SHAP & ALE, simpan hasil |
+| `/api/runs/latest` | `GET` | Publik / User | Mengambil data model terbaik terkini, metrik komparasi, data SHAP, dan titik kurva ALE |
+| `/api/runs/{run_id}` | `GET` | Publik / User | Mengambil arsip riwayat pelatihan model tertentu berdasarkan ID |
+| `/api/predict` | `POST` | User | Menjalankan inferensi produktivitas padi secara langsung berdasarkan input LST, NDVI, Curah Hujan |
+| `/api/monitoring/indicators` | `GET` | User | Mengambil ringkasan indikator spasial kabupaten & tren historis dari database |
+| `/api/health` | `GET` | Publik | Healthcheck status API dan konektivitas basis data PostgreSQL |
+
+### 22.2 Format Payload Unggah Dataset (`POST /api/admin/datasets/upload`)
+- **Tipe Konten:** `multipart/form-data`
+- **Parameter:**
+  - `file`: Berkas biner (`.csv`, `.xlsx`, `.xls`).
+  - `target` (opsional): Nama kolom target spesifik (default mendeteksi `Produktivitas`, `yield`, `production`).
+- **Format Respons Sukses (HTTP 200):**
+```json
+{
+  "id": "run-uuid-v4",
+  "filename": "dataset_padi_bali_ML_2018_2025.csv",
+  "rows": 847,
+  "features": ["NDVI", "LST", "Rainfall"],
+  "target": "Produktivitas",
+  "best_model": "Random Forest",
+  "metrics": {
+    "XGBoost": { "r2": 0.1190, "rmse": 7.9772, "mae": 5.6443 },
+    "Random Forest": { "r2": 0.1580, "rmse": 7.7988, "mae": 5.4869 }
+  },
+  "shap": [
+    { "feature": "Rainfall", "importance": 1.4820, "displayName": "CURAH HUJAN" },
+    { "feature": "NDVI", "importance": 0.9521, "displayName": "NDVI" },
+    { "feature": "LST", "importance": 0.6214, "displayName": "LST" }
+  ],
+  "ale": {
+    "NDVI": [ { "x": 0.42, "y": -1.2 }, { "x": 0.65, "y": 1.8 } ],
+    "LST": [ { "x": 26.5, "y": 0.9 }, { "x": 31.2, "y": -1.4 } ],
+    "Rainfall": [ { "x": 120, "y": -0.8 }, { "x": 450, "y": 1.1 } ]
+  }
+}
+```
+
+---
+
+## 23. Spesifikasi Basis Data PostgreSQL
+
+Sistem bertransisi dari penyimpanan SQLite lokal ke **PostgreSQL 15+** untuk menjamin konkurensi multi-user, integritas relasional, dan skalabilitas data spasial.
+
+### 23.1 Skema Tabel Utama
+
+1. **`users`**
+   - `id` (UUID, Primary Key)
+   - `name` (VARCHAR)
+   - `email` (VARCHAR, Unique)
+   - `hashed_password` (VARCHAR)
+   - `role` (VARCHAR: `admin` | `analyst` | `viewer`)
+   - `created_at` (TIMESTAMP)
+
+2. **`training_runs`**
+   - `id` (VARCHAR, Primary Key)
+   - `filename` (VARCHAR)
+   - `created_at` (TIMESTAMP)
+   - `rows_count` (INTEGER)
+   - `features` (JSONB)
+   - `target_column` (VARCHAR)
+   - `best_model` (VARCHAR)
+   - `metrics` (JSONB)
+   - `shap_data` (JSONB)
+   - `ale_data` (JSONB)
+   - `model_path` (VARCHAR)
+   - `uploaded_by` (UUID, Foreign Key ke `users.id`)
+
+3. **`dataset_records`**
+   - `id` (BIGSERIAL, Primary Key)
+   - `run_id` (VARCHAR, Foreign Key ke `training_runs.id`)
+   - `region_name` (VARCHAR)
+   - `year` (INTEGER)
+   - `month` (INTEGER)
+   - `ndvi` (DOUBLE PRECISION)
+   - `lst` (DOUBLE PRECISION)
+   - `rainfall` (DOUBLE PRECISION)
+   - `productivity` (DOUBLE PRECISION)
+
+---
+
+## 24. Daftar Pekerjaan yang Harus Dilakukan (Action Items)
+
+Berikut adalah daftar pekerjaan implementasi yang wajib diselesaikan untuk mewujudkan arsitektur sistem penuh:
+
+### Fase 1: Konsolidasi Kode & Struktur Monorepo
+- [ ] Pindahkan folder `backend/` dari `sc-sipadi/sc-sipadi/backend` ke direktori root workspace aktif [`web project/backend`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/backend).
+- [ ] Pindahkan dan selaraskan komponen antarmuka [`AdminPage.tsx`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/src/pages/AdminPage.tsx) ke dalam direktori `src/pages/` di workspace aktif.
+- [ ] Daftarkan route `/dashboard/admin` pada [`src/App.tsx`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/src/App.tsx) dan tambahkan menu navigasi "Admin Dataset" pada [`src/components/layout/AppSidebar.tsx`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/src/components/layout/AppSidebar.tsx).
+
+### Fase 2: Peningkatan Pipeline Validasi & Machine Learning
+- [ ] Implementasikan modul validasi dataset ketat di backend (`backend/validator.py`):
+  - Validasi keberadaan kolom wajib (NDVI, LST, Curah Hujan, Produktivitas).
+  - Validasi rentang nilai fisik: NDVI $[-1.0, 1.0]$, LST $[15.0, 45.0]$ °C, Rainfall $\ge 0$ mm, Produktivitas $> 0$.
+  - Pelaporan detail kesalahan baris atau kolom yang tidak valid dalam format JSON terstruktur.
+- [ ] Standarisasi pipeline evaluasi metrik ganda (XGBoost Regressor vs Random Forest Regressor) dengan output komparasi $R^2$, $RMSE$, dan $MAE$.
+- [ ] Stabilisasi kalkulasi kurva respons ALE pada kuantil fitur serta ekstraksi nilai kepentingan SHAP TreeExplainer.
+
+### Fase 3: Transisi & Integrasi Basis Data PostgreSQL
+- [ ] Buat file konfigurasi koneksi basis data (`backend/database.py`) menggunakan SQLAlchemy dengan URI PostgreSQL yang dapat dikonfigurasi via file `.env` (dengan fallback otomatis ke SQLite untuk mode pengembangan lokal tanpa PostgreSQL).
+- [ ] Implementasikan skema tabel PostgreSQL (`users`, `training_runs`, `dataset_records`).
+- [ ] Pastikan biner model serial tersimpan rapi di direktori `backend/artifacts/` dengan penamaan terstruktur berbasis ID pelatihan.
+
+### Fase 4: Autentikasi Admin & Proteksi Akses
+- [ ] Buat skema otentikasi login admin menggunakan JWT (JSON Web Token) dengan hashing kata sandi (`passlib` / `bcrypt`).
+- [ ] Tambahkan dependency security FastAPI (`Depends(get_current_admin)`) pada endpoint upload dataset `/api/admin/datasets/upload`.
+- [ ] Hubungkan form Login di frontend untuk menyimpan token admin ke `localStorage` / React context.
+
+### Fase 5: Integrasi Live API Frontend (`apiService.ts`)
+- [ ] Perbarui [`src/services/apiService.ts`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/src/services/apiService.ts) untuk memanggil endpoint live:
+  - `getShapData()` memanggil `/api/runs/latest`.
+  - `getAleData()` memanggil `/api/runs/latest`.
+  - `predictYield()` memanggil `POST /api/predict`.
+- [ ] Tetapkan mekanisme graceful fallback ke mock data jika server backend sedang tidak berjalan (offline).
+- [ ] Hubungkan formulir interaktif di `PredictionModelPage.tsx` langsung ke endpoint `/api/predict`.
+
+---
+
+## 25. Kesimpulan
+
+Dengan integrasi arsitektur full-stack versi 3.0 ini, SIPADI tidak lagi sekadar prototipe antarmuka frontend, melainkan sebuah platform operasional kecerdasan buatan pertanian yang utuh. Setiap tahapan mulai dari unggah dataset penginderaan jauh, validasi kualitas data, kompetisi model XGBoost vs Random Forest, atribusi interpretabilitas SHAP & ALE, hingga persistensi pada PostgreSQL dan penyajian analitik di dashboard terangkai dalam satu alur kerja yang terstandarisasi, transparan, dan dapat diandalkan oleh para penyuluh, analis, dan kelompok tani.

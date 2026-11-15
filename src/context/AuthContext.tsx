@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserProfile } from '../types';
-import { DEMO_USER } from '../mocks/data';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -13,35 +12,85 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(() => {
-    const saved = localStorage.getItem('sipadi_demo_user');
-    return saved ? JSON.parse(saved) : DEMO_USER;
+    const saved = localStorage.getItem('sipadi_user_profile');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return null;
+      }
+    }
+    return null; // Not logged in by default
   });
 
   const isAuthenticated = !!user;
 
-  const login = async (email: string) => {
-    // Simulated auth delay
-    await new Promise((r) => setTimeout(r, 400));
+  const login = async (email: string, password: string = 'admin123'): Promise<boolean> => {
+    const cleanEmail = email.trim().toLowerCase();
+
+    try {
+      // Attempt live login with FastAPI backend
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, password }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const isAdmin = data.user.role === 'admin';
+        const profile: UserProfile = {
+          id: data.user.id,
+          name: data.user.name,
+          email: data.user.email,
+          role: data.user.role,
+          avatarInitials: isAdmin ? 'AD' : 'WS',
+        };
+
+        setUser(profile);
+        localStorage.setItem('sipadi_user_profile', JSON.stringify(profile));
+        localStorage.setItem('sipadi_token', data.access_token);
+        if (isAdmin) {
+          localStorage.setItem('sipadi_admin_token', data.access_token);
+        }
+        return true;
+      }
+    } catch {
+      // Backend offline fallback handled below
+    }
+
+    // Graceful offline demo fallback
+    await new Promise((r) => setTimeout(r, 250));
+    const isAdmin = cleanEmail.includes('admin') || cleanEmail === 'admin@sipadi.id';
     const profile: UserProfile = {
-      ...DEMO_USER,
-      email: email.trim() || DEMO_USER.email,
+      id: isAdmin ? 'admin-uuid' : 'user-uuid',
+      name: isAdmin ? 'Administrator SIPADI' : 'I Wayan Sudiarta',
+      email: cleanEmail || (isAdmin ? 'admin@sipadi.id' : 'user@sipadi.id'),
+      role: isAdmin ? 'admin' : 'user',
+      avatarInitials: isAdmin ? 'AD' : 'WS',
     };
+
     setUser(profile);
-    localStorage.setItem('sipadi_demo_user', JSON.stringify(profile));
+    localStorage.setItem('sipadi_user_profile', JSON.stringify(profile));
+    if (isAdmin) {
+      localStorage.setItem('sipadi_admin_token', 'demo-admin-token');
+    }
     return true;
   };
 
   const logout = () => {
     setUser(null);
+    localStorage.removeItem('sipadi_user_profile');
     localStorage.removeItem('sipadi_demo_user');
+    localStorage.removeItem('sipadi_token');
+    localStorage.removeItem('sipadi_admin_token');
   };
 
   useEffect(() => {
-    // Keep local storage synced
     if (user) {
-      localStorage.setItem('sipadi_demo_user', JSON.stringify(user));
+      localStorage.setItem('sipadi_user_profile', JSON.stringify(user));
     } else {
-      localStorage.removeItem('sipadi_demo_user');
+      localStorage.removeItem('sipadi_user_profile');
     }
   }, [user]);
 
