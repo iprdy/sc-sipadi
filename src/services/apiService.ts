@@ -152,6 +152,8 @@ export const apiService = {
             samples: r.samples,
           })),
           monthlyObservations: data.monthly_observations || [],
+          conclusion: data.conclusion || null,
+          aiMeta: data.aiMeta || undefined,
         };
       }
       return getMockInsightData(regionId, year);

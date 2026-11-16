@@ -115,6 +115,13 @@ export interface MonthlyObservation {
   productivity: number;
 }
 
+export interface InsightConclusion {
+  evaluasiPanen: string;
+  kondisiBiofisik: string;
+  validasiXai: string;
+  aksiLapangan: string;
+}
+
 export interface InsightData {
   regionId: RegionId;
   year: number;
@@ -130,6 +137,12 @@ export interface InsightData {
   parcels: FieldParcel[];
   regionalRanking?: RegencyMapMetric[];
   monthlyObservations?: MonthlyObservation[];
+  conclusion?: InsightConclusion | null;
+  aiMeta?: {
+    cached: boolean;
+    generatedBy: string;
+    generatedAt?: string | null;
+  };
 }
 
 // Model Prediction Input and Response (For future ML integration)

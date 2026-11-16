@@ -251,15 +251,21 @@ export const InsightPage: React.FC = () => {
               </h4>
             </div>
             <p className="text-xs text-[#4E6050] leading-relaxed">
-              Secara umum hasil panen di {currentRegionName} masuk kategori{' '}
-              <strong className="text-[#164A32]">{data.harvestCategory}</strong> dengan rata-rata{' '}
-              <strong className="text-[#164A32]">{avgYieldDisplay} ton/ha</strong>
-              {activeRegionStat ? ` (peringkat #${activeRegionStat.rank} di Bali)` : ''}.
-              {topRegionStat && activeRegionStat && topRegionStat.regionId !== activeRegionStat.regionId && (
+              {data.conclusion?.evaluasiPanen ? (
+                data.conclusion.evaluasiPanen
+              ) : (
                 <>
-                  {' '}Wilayah tertinggi tahun {selectedYear} adalah{' '}
-                  <strong className="text-[#164A32]">{topRegionStat.name}</strong>{' '}
-                  ({topRegionStat.avgProductivityTonHa.toFixed(2)} ton/ha).
+                  Secara umum hasil panen di {currentRegionName} masuk kategori{' '}
+                  <strong className="text-[#164A32]">{data.harvestCategory}</strong> dengan rata-rata{' '}
+                  <strong className="text-[#164A32]">{avgYieldDisplay} ton/ha</strong>
+                  {activeRegionStat ? ` (peringkat #${activeRegionStat.rank} di Bali)` : ''}.
+                  {topRegionStat && activeRegionStat && topRegionStat.regionId !== activeRegionStat.regionId && (
+                    <>
+                      {' '}Wilayah tertinggi tahun {selectedYear} adalah{' '}
+                      <strong className="text-[#164A32]">{topRegionStat.name}</strong>{' '}
+                      ({topRegionStat.avgProductivityTonHa.toFixed(2)} ton/ha).
+                    </>
+                  )}
                 </>
               )}
             </p>
@@ -276,22 +282,28 @@ export const InsightPage: React.FC = () => {
               </h4>
             </div>
             <p className="text-xs text-[#4E6050] leading-relaxed">
-              {positiveDrivers.length > 0 ? (
-                <>
-                  Pertumbuhan padi ditopang baik oleh{' '}
-                  <strong className="text-[#164A32]">
-                    {positiveDrivers.map((d) => d.feature.split('(')[0].trim()).join(' dan ')}
-                  </strong>
-                  .
-                </>
+              {data.conclusion?.kondisiBiofisik ? (
+                data.conclusion.kondisiBiofisik
               ) : (
-                <>Kondisi lingkungan sedang mengalami tekanan cuaca di sebagian wilayah pengamatan.</>
-              )}{' '}
-              {negativeDrivers.length > 0
-                ? `Faktor yang sedikit menahan hasil berasal dari ${negativeDrivers
-                    .map((d) => d.feature.split('(')[0].trim())
-                    .join(' dan ')}.`
-                : 'Tidak ada faktor cuaca ekstrem yang menghambat fase pengisian bulir padi.'}
+                <>
+                  {positiveDrivers.length > 0 ? (
+                    <>
+                      Pertumbuhan padi ditopang baik oleh{' '}
+                      <strong className="text-[#164A32]">
+                        {positiveDrivers.map((d) => d.feature.split('(')[0].trim()).join(' dan ')}
+                      </strong>
+                      .
+                    </>
+                  ) : (
+                    <>Kondisi lingkungan sedang mengalami tekanan cuaca di sebagian wilayah pengamatan.</>
+                  )}{' '}
+                  {negativeDrivers.length > 0
+                    ? `Faktor yang sedikit menahan hasil berasal dari ${negativeDrivers
+                        .map((d) => d.feature.split('(')[0].trim())
+                        .join(' dan ')}.`
+                    : 'Tidak ada faktor cuaca ekstrem yang menghambat fase pengisian bulir padi.'}
+                </>
+              )}
             </p>
           </div>
 
@@ -306,9 +318,15 @@ export const InsightPage: React.FC = () => {
               </h4>
             </div>
             <p className="text-xs text-[#4E6050] leading-relaxed">
-              Angka perkiraan tidak dibuat secara acak—sistem membandingkan tingkat kehijauan daun padi,
-              suhu permukaan lahan, serta curah hujan {currentRegionName} tahun {selectedYear} terhadap
-              pola panen historis di seluruh Bali.
+              {data.conclusion?.validasiXai ? (
+                data.conclusion.validasiXai
+              ) : (
+                <>
+                  Angka perkiraan tidak dibuat secara acak—sistem membandingkan tingkat kehijauan daun padi,
+                  suhu permukaan lahan, serta curah hujan {currentRegionName} tahun {selectedYear} terhadap
+                  pola panen historis di seluruh Bali.
+                </>
+              )}
             </p>
           </div>
 
@@ -323,7 +341,9 @@ export const InsightPage: React.FC = () => {
               </h4>
             </div>
             <p className="text-xs text-[#4E6050] leading-relaxed">
-              {bestMonth && lowestMonth && bestMonth.month !== lowestMonth.month ? (
+              {data.conclusion?.aksiLapangan ? (
+                data.conclusion.aksiLapangan
+              ) : bestMonth && lowestMonth && bestMonth.month !== lowestMonth.month ? (
                 <>
                   Hasil terbaik tercatat pada bulan{' '}
                   <strong className="text-[#164A32]">{MONTH_LABELS[(bestMonth.month - 1) % 12]}</strong>{' '}

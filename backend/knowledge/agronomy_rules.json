@@ -1,0 +1,64 @@
+{
+  "ndvi_rules": {
+    "low": {
+      "threshold": "< 0.58",
+      "title": "Kerapatan Kanopi Rendah",
+      "knowledge": "Nilai NDVI di bawah 0.58 menandakan kerapatan tajuk daun belum maksimal atau adanya jarak tanam yang kurang rapat. Perlu evaluasi pemupukan nitrogen/NPK susulan pada fase vegetatif serta pengecekan kecukupan air awal."
+    },
+    "optimal": {
+      "threshold": "0.58 - 0.72",
+      "title": "Kanopi Vegetatif Optimal",
+      "knowledge": "Rentang NDVI 0.58 hingga 0.72 merupakan zona sehat bagi tanaman padi untuk melakukan fotosintesis maksimal selama fase pengisian malai tanpa kelebatan tajuk berlebih."
+    },
+    "saturation": {
+      "threshold": "> 0.72",
+      "title": "Kanopi Rimbun Mendekati Titik Saturasi",
+      "knowledge": "Pada nilai NDVI tinggi di atas 0.72, biomassa daun sangat lebat dan mulai mendekati titik saturasi kurva ALE; penambahan pupuk nitrogen berlebih tidak lagi menaikkan gabah secara proporsional dan justru meningkatkan risiko rebah atau serangan hama wereng."
+    }
+  },
+  "lst_rules": {
+    "cool": {
+      "threshold": "< 29.0 C",
+      "title": "Mikroklimat Sejuk Dataran Menengah/Tinggi",
+      "knowledge": "Suhu permukaan di bawah 29 C khas lahan dataran menengah hingga tinggi Bali. Kondisi ini menekan laju penguapan namun memperlambat akumulasi panas harian sehingga siklus pematangan bulir cenderung lebih panjang."
+    },
+    "optimal": {
+      "threshold": "29.0 - 32.0 C",
+      "title": "Suhu Permukaan Fisiologis Ideal",
+      "knowledge": "Suhu permukaan 29 hingga 32 C di siang hari mendukung laju metabolisme dan penyerapan hara akar selama ketersediaan air irigasi mencukupi."
+    },
+    "heat_stress": {
+      "threshold": "> 32.0 C",
+      "title": "Potensi Tekanan Panas (Heat Stress)",
+      "knowledge": "Suhu permukaan tanah melampaui 32 C berpotensi memicu stres panas mikro pada fase pembungaan dan pengisian bulir. Disarankan menjaga sirkulasi pengairan basah-kering terjadwal (intermittent irrigation) untuk menjaga kelembapan zona perakaran."
+    }
+  },
+  "rainfall_rules": {
+    "deficit": {
+      "threshold": "< 10000 mm",
+      "title": "Pasokan Curah Hujan Relatif Rendah",
+      "knowledge": "Akumulasi presipitasi yang relatif rendah menuntut disiplin jadwal giliran air pada saluran irigasi tersier agar lahan tidak mengalami retak kekeringan saat fase generatif."
+    },
+    "adequate": {
+      "threshold": "10000 - 16500 mm",
+      "title": "Suplai Hidrologi Musiman Seimbang",
+      "knowledge": "Pasokan curah hujan dalam rentang seimbang memberikan penyangga ketersediaan air irigasi yang stabil bagi fase anakan aktif hingga pengisian gabah."
+    },
+    "excess": {
+      "threshold": "> 16500 mm",
+      "title": "Curah Hujan Tinggi & Kelembapan Ekstra",
+      "knowledge": "Intensitas hujan tinggi di atas rerata provinsi memerlukan pemeriksaan kelancaran saluran pembuangan (drainase) agar tidak terjadi genangan berkepanjangan serta pencegahan penyakit jamur/blas daun."
+    }
+  },
+  "regional_profiles": {
+    "badung": "Wilayah Badung didominasi sawah dataran rendah dengan sistem irigasi teknis yang baik serta produktivitas gabah unggul di provinsi Bali.",
+    "tabanan": "Wilayah Tabanan merupakan sentra lumbung padi Bali dengan kontur terasering pegunungan di utara dan dataran subur di selatan.",
+    "gianyar": "Wilayah Gianyar memiliki kombinasi sawah berteras di bagian utara dan lahan irigasi produktif di dataran tengah-selatan.",
+    "bangli": "Wilayah Bangli didominasi topografi dataran tinggi yang lebih sejuk dengan karakteristik varietas dan laju pematangan khas pegunungan.",
+    "buleleng": "Wilayah Buleleng membentang di pesisir utara Bali dengan suhu permukaan siang hari relatif hangat dan variasi curah hujan antarkecamatan.",
+    "jembrana": "Wilayah Jembrana berada di Bali barat dengan hamparan persawahan dataran rendah dan pesisir yang bergantung pada keteraturan irigasi sungai.",
+    "karangasem": "Wilayah Karangasem memiliki lanskap berbukit hingga lereng vulkanik dengan variasi ketinggian lahan sawah yang beragam.",
+    "klungkung": "Wilayah Klungkung terdiri atas dataran aluvial subur beririgasi di daratan utama dengan luasan lahan sawah yang relatif padat.",
+    "denpasar": "Wilayah Kota Denpasar merupakan area pertanian perkotaan beririgasi di hilir aliran sungai dengan produktivitas intensif meski luasan lahannya terbatas."
+  }
+}

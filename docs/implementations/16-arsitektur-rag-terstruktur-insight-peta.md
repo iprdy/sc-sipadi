@@ -66,7 +66,7 @@ class InsightSummary(Base):
     aksi_lapangan = Column(Text, nullable=False)
 
     # Metadata Audit & Cache
-    generated_by = Column(String(80), nullable=False)  # Contoh: "gemini-2.5-flash" / "template-fallback"
+    generated_by = Column(String(80), nullable=False, default="gemini-3.5-flash-lite")  # Contoh: "gemini-3.5-flash-lite" / "template-fallback"
     created_at = Column(DateTime, default=datetime.utcnow)
 
     run = relationship("TrainingRun")
@@ -103,7 +103,7 @@ Backend mengirim payload konteks kuantitatif (statistik kabupaten, delta YoY, pe
   "headlineSummary": "Ringkasan 1-2 kalimat eksekutif yang memuat angka produktivitas, status kategori, dan faktor penentu utama wilayah pada tahun terpilih.",
   "harvestCategoryNote": "Catatan komparatif terhadap median provinsi Bali dan tren tahun sebelumnya.",
   "conclusion": {
-    "evaluasiPanen": "Analisis capaian produktivitas wilayah, peringkat komparatif antar-kabupaten, dan stabilitas antar petak lahan.",
+    "evaluasiPanen": "Analisis capaian produktivitas wilayah, peringkat komparatif antar-kabupaten, dan fluktuasi bulanan (Jan-Des).",
     "kondisiBiofisik": "Analisis sinergi NDVI, suhu permukaan LST, dan pasokan curah hujan berdasarkan data observasi aktual.",
     "validasiXai": "Penjelasan penalaran model terbaik berdasarkan kontribusi positif/negatif nilai SHAP dan posisi kurva ALE.",
     "aksiLapangan": "Rekomendasi teknis konkret untuk petugas lapangan/petani (irigasi, drainase, pemupukan, atau adaptasi suhu)."
@@ -111,7 +111,38 @@ Backend mengirim payload konteks kuantitatif (statistik kabupaten, delta YoY, pe
 }
 ```
 
-### 5.2 Pembaruan Kontrak Frontend ([`src/types/index.ts`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/src/types/index.ts))
+### 5.2 Spesifikasi Model & Integrasi SDK (`google-genai`)
+Integrasi menggunakan SDK resmi Google Gemini (**`google-genai`**) dengan model **`gemini-3.5-flash-lite`** yang mendukung penuh *Structured Outputs* pada **Free Tier** Google AI Studio, memiliki latensi rendah, dan efisien untuk *pre-warming* maupun *lazy caching*:
+
+```python
+from google import genai
+from google.genai import types
+from pydantic import BaseModel
+
+class ConclusionSchema(BaseModel):
+    evaluasiPanen: str
+    kondisiBiofisik: str
+    validasiXai: str
+    aksiLapangan: str
+
+class InsightSynthesisSchema(BaseModel):
+    headlineSummary: str
+    harvestCategoryNote: str
+    conclusion: ConclusionSchema
+
+client = genai.Client()  # Membaca GEMINI_API_KEY dari environment
+response = client.models.generate_content(
+    model="gemini-3.5-flash-lite",
+    contents=grounded_prompt,
+    config=types.GenerateContentConfig(
+        temperature=0.25,
+        response_mime_type="application/json",
+        response_schema=InsightSynthesisSchema,
+    ),
+)
+```
+
+### 5.3 Pembaruan Kontrak Frontend ([`src/types/index.ts`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/src/types/index.ts))
 Tambahkan properti opsional `conclusion` dan `aiMeta` pada interface [`InsightData`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/src/types/index.ts#L99-L112):
 
 ```typescript
@@ -142,18 +173,19 @@ Pada [`InsightPage.tsx`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Si
 1. **Lazy Caching (On-Demand):** Ringkasan AI hanya dibuat saat pasangan `(kabupaten, tahun)` pertama kali dibuka di halaman **Insight & Peta**, lalu langsung disimpan ke tabel `insight_summaries`.
 2. **Opsional Pre-Warming / Regenerate:** Admin dapat diberi parameter query opsional `?refresh=true` (dilindungi autentikasi admin) jika ingin me-regenerate narasi untuk suatu wilayah/tahun tanpa harus mengunggah ulang dataset.
 3. **Konfigurasi Environment ([`backend/.env.example`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/backend/.env.example)):**
-   - Tambahkan `LLM_PROVIDER` (`gemini` / `openai` / `ollama`), `LLM_API_KEY`, dan `LLM_MODEL`.
-   - Jika `LLM_API_KEY` kosong atau layanan eksternal tidak terjangkau, sistem otomatis menggunakan *deterministic fallback generator* berbasis data aktual tanpa menulis status fallback ke cache permanen.
+   - Tambahkan `GEMINI_API_KEY=` dan `GEMINI_MODEL=gemini-3.5-flash-lite`.
+   - Tambahkan `google-genai` ke [`backend/requirements.txt`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/backend/requirements.txt).
+   - Jika `GEMINI_API_KEY` kosong atau layanan eksternal tidak terjangkau, sistem otomatis menggunakan *deterministic fallback generator* berbasis data aktual tanpa menulis status fallback ke cache permanen.
 
 ---
 
 ## 7. Rencana Aksi Implementasi (To-Do List)
 
-- [ ] **Fase 1: Skema Database & Knowledge Base**
-  - Menambahkan tabel `InsightSummary` ke [`backend/models.py`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/backend/models.py) dan konfigurasi `.env` untuk LLM API key.
+- [ ] **Fase 1: Skema Database, Dependencies & Knowledge Base**
+  - Menambahkan tabel `InsightSummary` ke [`backend/models.py`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/backend/models.py), paket `google-genai` ke `requirements.txt`, serta konfigurasi `GEMINI_API_KEY` & `GEMINI_MODEL=gemini-3.5-flash-lite` di `.env`.
   - Membuat modul `backend/rag_engine.py` beserta korpus aturan agronomi padi di `backend/knowledge/`.
-- [ ] **Fase 2: Pipeline Retrieval + Structured LLM Synthesis**
+- [ ] **Fase 2: Pipeline Retrieval + Structured Gemini Synthesis**
   - Menghubungkan `rag_engine.py` dengan query statistik wilayah, `shap.TreeExplainer`, dan data ALE dari [`backend/main.py`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/backend/main.py).
-  - Mengimplementasikan logika *cache-first* (`SELECT` $\rightarrow$ jika kosong panggil LLM + `INSERT`) dan mekanisme *fallback* saat offline.
+  - Mengimplementasikan logika *cache-first* (`SELECT` $\rightarrow$ jika kosong panggil `gemini-3.5-flash-lite` dengan `response_schema` + `INSERT`) dan mekanisme *fallback* saat offline.
 - [ ] **Fase 3: Integrasi Frontend `InsightPage`**
-  - Memperbarui [`src/types/index.ts`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/src/types/index.ts), [`src/services/apiService.ts`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/src/services/apiService.ts), dan 4 pilar card pada [`InsightPage.tsx`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/src/pages/InsightPage.tsx) agar menampilkan hasil sintesis AI dari backend beserta indikator status cache/terverifikasi.
+  - Memperbarui [`src/types/index.ts`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/src/types/index.ts), [`src/services/apiService.ts`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/src/services/apiService.ts), dan 4 pilar card pada [`InsightPage.tsx`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/src/pages/InsightPage.tsx) agar menampilkan hasil sintesis AI secara dinamis.

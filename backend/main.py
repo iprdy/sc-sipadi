@@ -25,7 +25,8 @@ from backend.ml_engine import (
     save_model_artifact,
     train_dual_models,
 )
-from backend.models import DatasetRecord, TrainingRun, User
+from backend.models import DatasetRecord, InsightSummary, TrainingRun, User
+from backend.rag_engine import get_or_create_insight_synthesis
 from backend.validator import validate_dataset
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -682,16 +683,118 @@ def get_insight_data(
             })
     monthly_observations.sort(key=lambda x: x["month"])
 
+    latest_run = db.query(TrainingRun).order_by(TrainingRun.created_at.desc()).first()
+    synthesis = get_or_create_insight_synthesis(
+        db=db,
+        run=latest_run,
+        region_id=_to_region_id(reg_name),
+        region_name=reg_name,
+        year=selected_year,
+        selected_metric=matched,
+        ranking=regional_ranking,
+        monthly_observations=monthly_observations,
+        harvest_category=harvest_category,
+        default_headline=headline,
+        default_note=harvest_note,
+        force_refresh=False,
+    )
+
     return {
         "year": selected_year,
         "selected_region": matched,
         "regional_ranking": regional_ranking,
         "monthly_observations": monthly_observations,
-        "headlineSummary": headline,
+        "headlineSummary": synthesis["headlineSummary"],
         "harvestCategory": harvest_category,
-        "harvestCategoryNote": harvest_note,
+        "harvestCategoryNote": synthesis["harvestCategoryNote"],
         "keyDrivers": key_drivers,
+        "conclusion": synthesis.get("conclusion"),
+        "aiMeta": synthesis.get("aiMeta"),
         "parcels": [],
+    }
+
+
+@app.post("/api/admin/insight/regenerate")
+def regenerate_insight_summary(
+    region: str = "tabanan",
+    year: int = 2025,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Force regenerate and overwrite cached Structured RAG insight for a given region & year."""
+    clean_keyword = region.lower().replace("kota ", "").replace("kabupaten ", "").strip()
+    records = _latest_dataset_query(db).filter(DatasetRecord.tahun == year).all()
+    if not records:
+        raise HTTPException(status_code=404, detail="Data tahun terpilih tidak ditemukan.")
+
+    df = pd.DataFrame([
+        {
+            "kabupaten": r.kabupaten,
+            "tahun": r.tahun,
+            "bulan": r.bulan,
+            "ndvi": r.ndvi,
+            "lst": r.lst,
+            "rainfall": r.rainfall,
+            "produktivitas": r.produktivitas,
+        }
+        for r in records
+    ])
+    regional_ranking = []
+    for kab, grp in df.groupby("kabupaten"):
+        avg_p = float(grp["produktivitas"].mean())
+        ton_ha = round(avg_p / 10 if avg_p > 20 else avg_p, 2)
+        regional_ranking.append({
+            "regionId": _to_region_id(str(kab)),
+            "name": kab,
+            "avg_productivity_ton_ha": ton_ha,
+            "avg_ndvi": round(float(grp["ndvi"].mean()), 3),
+            "avg_lst": round(float(grp["lst"].mean()), 1),
+            "avg_rainfall": round(float(grp["rainfall"].mean()), 1),
+            "samples": len(grp),
+        })
+    regional_ranking.sort(key=lambda x: x["avg_productivity_ton_ha"], reverse=True)
+    for idx, item in enumerate(regional_ranking):
+        item["rank"] = idx + 1
+
+    matched = next((r for r in regional_ranking if clean_keyword in r["name"].lower()), None)
+    if not matched:
+        raise HTTPException(status_code=404, detail="Wilayah tidak ditemukan pada dataset.")
+
+    avg_yield = matched["avg_productivity_ton_ha"]
+    harvest_category = "Tinggi" if avg_yield >= 6.1 else ("Optimal" if avg_yield >= 5.5 else ("Waspada" if avg_yield >= 4.8 else "Rendah"))
+    reg_df = df[df["kabupaten"] == matched["name"]]
+    monthly_observations = [
+        {
+            "month": int(m),
+            "ndvi": round(float(m_grp["ndvi"].mean()), 3),
+            "lst": round(float(m_grp["lst"].mean()), 1),
+            "rainfall": round(float(m_grp["rainfall"].mean()), 1),
+            "productivity": round(float(m_grp["produktivitas"].mean()) / 10 if float(m_grp["produktivitas"].mean()) > 20 else float(m_grp["produktivitas"].mean()), 2),
+        }
+        for m, m_grp in reg_df.dropna(subset=["bulan"]).groupby("bulan")
+    ]
+    monthly_observations.sort(key=lambda x: x["month"])
+
+    latest_run = db.query(TrainingRun).order_by(TrainingRun.created_at.desc()).first()
+    synthesis = get_or_create_insight_synthesis(
+        db=db,
+        run=latest_run,
+        region_id=_to_region_id(matched["name"]),
+        region_name=matched["name"],
+        year=year,
+        selected_metric=matched,
+        ranking=regional_ranking,
+        monthly_observations=monthly_observations,
+        harvest_category=harvest_category,
+        default_headline=f"Observasi {matched['name']} tahun {year}: {avg_yield} ton/ha.",
+        default_note=f"Peringkat #{matched['rank']} dari {len(regional_ranking)} wilayah.",
+        force_refresh=True,
+    )
+    return {
+        "region": matched["name"],
+        "year": year,
+        "regenerated_by": admin.email,
+        **synthesis,
     }
 
 

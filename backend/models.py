@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from backend.database import Base
 
@@ -49,4 +49,32 @@ class DatasetRecord(Base):
     produktivitas = Column(Float, nullable=False)
 
     run = relationship("TrainingRun", back_populates="records")
+
+
+class InsightSummary(Base):
+    __tablename__ = "insight_summaries"
+    __table_args__ = (
+        UniqueConstraint("run_id", "kabupaten", "tahun", name="uq_insight_run_region_year"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    run_id = Column(String(64), ForeignKey("training_runs.id", ondelete="CASCADE"), index=True, nullable=False)
+    kabupaten = Column(String(100), index=True, nullable=False)
+    tahun = Column(Integer, index=True, nullable=False)
+
+    # Konten Card Executive Summary
+    headline_summary = Column(Text, nullable=False)
+    harvest_category_note = Column(Text, nullable=False)
+
+    # Konten 4 Pilar Card Kesimpulan Secara Keseluruhan
+    evaluasi_panen = Column(Text, nullable=False)
+    kondisi_biofisik = Column(Text, nullable=False)
+    validasi_xai = Column(Text, nullable=False)
+    aksi_lapangan = Column(Text, nullable=False)
+
+    # Metadata Audit & Cache
+    generated_by = Column(String(80), nullable=False, default="gemini-3.5-flash-lite")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    run = relationship("TrainingRun")
 
