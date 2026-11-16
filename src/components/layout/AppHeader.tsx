@@ -58,7 +58,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ isSidebarExpanded }) => {
             >
               {years.map((y) => (
                 <option key={y} value={y}>
-                  {y} {y === 2025 ? '(Proyeksi)' : ''}
+                  {y}
                 </option>
               ))}
             </select>

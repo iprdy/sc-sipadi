@@ -63,7 +63,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       path: '/dashboard/admin',
       icon: UploadCloud,
       desc: 'Upload & Pelatihan Model',
-      highlight: true,
     }] : []),
     {
       label: 'Tentang Sistem',

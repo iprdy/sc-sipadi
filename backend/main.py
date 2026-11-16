@@ -382,13 +382,29 @@ def get_filter_meta(db: Session = Depends(get_db)):
     }
 
 
+def _latest_dataset_query(db: Session):
+    """Query DatasetRecord scoped to the most recent active TrainingRun to prevent duplicate counting."""
+    latest_run = db.query(TrainingRun).order_by(TrainingRun.created_at.desc()).first()
+    q = db.query(DatasetRecord)
+    if latest_run:
+        q = q.filter(DatasetRecord.run_id == latest_run.id)
+    return q
+
+
+def _to_region_id(name: str) -> str:
+    low = name.lower().strip()
+    if "denpasar" in low:
+        return "denpasar"
+    return low.replace("kabupaten ", "").replace("kota ", "").strip()
+
+
 @app.get("/api/monitoring/data")
 def get_monitoring_data(
     region: Optional[str] = None,
     year: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
-    query = db.query(DatasetRecord)
+    query = _latest_dataset_query(db)
     matched_region = region or "tabanan"
     clean_keyword = matched_region.lower().replace("kota ", "").replace("kabupaten ", "").strip()
     
@@ -400,7 +416,7 @@ def get_monitoring_data(
     records = query.all()
     if not records:
         # Fallback to all records of that region or general
-        records = db.query(DatasetRecord).filter(DatasetRecord.kabupaten.ilike(f"%{clean_keyword}%")).all()
+        records = _latest_dataset_query(db).filter(DatasetRecord.kabupaten.ilike(f"%{clean_keyword}%")).all()
 
     df = pd.DataFrame([
         {
@@ -436,7 +452,7 @@ def get_monitoring_data(
     }
 
     # Calculate REAL historical trend (2018-2025) for this region
-    all_region_records = db.query(DatasetRecord).filter(DatasetRecord.kabupaten.ilike(f"%{clean_keyword}%")).all()
+    all_region_records = _latest_dataset_query(db).filter(DatasetRecord.kabupaten.ilike(f"%{clean_keyword}%")).all()
     all_df = pd.DataFrame([{"tahun": r.tahun, "produktivitas": r.produktivitas} for r in all_region_records])
     
     trend = []
@@ -452,7 +468,7 @@ def get_monitoring_data(
     trend.sort(key=lambda x: x["year"])
 
     # Aggregate by region
-    all_db_records = db.query(DatasetRecord).filter(DatasetRecord.tahun == (year or 2025)).all()
+    all_db_records = _latest_dataset_query(db).filter(DatasetRecord.tahun == (year or 2025)).all()
     summary_df = pd.DataFrame([{"kabupaten": r.kabupaten, "produktivitas": r.produktivitas} for r in all_db_records])
     
     region_stats = []
@@ -535,14 +551,15 @@ def get_insight_data(
     selected_year = year or 2025
     clean_keyword = (region or "tabanan").lower().replace("kota ", "").replace("kabupaten ", "").strip()
 
-    records = db.query(DatasetRecord).filter(DatasetRecord.tahun == selected_year).all()
+    records = _latest_dataset_query(db).filter(DatasetRecord.tahun == selected_year).all()
     if not records:
-        records = db.query(DatasetRecord).all()
+        records = _latest_dataset_query(db).all()
 
     df = pd.DataFrame([
         {
             "kabupaten": r.kabupaten,
             "tahun": r.tahun,
+            "bulan": r.bulan,
             "ndvi": r.ndvi,
             "lst": r.lst,
             "rainfall": r.rainfall,
@@ -556,6 +573,7 @@ def get_insight_data(
         avg_p = float(grp["produktivitas"].mean())
         ton_ha = round(avg_p / 10 if avg_p > 20 else avg_p, 2)
         regional_ranking.append({
+            "regionId": _to_region_id(str(kab)),
             "name": kab,
             "avg_productivity_ton_ha": ton_ha,
             "avg_ndvi": round(float(grp["ndvi"].mean()), 3),
@@ -565,6 +583,8 @@ def get_insight_data(
         })
 
     regional_ranking.sort(key=lambda x: x["avg_productivity_ton_ha"], reverse=True)
+    for idx, item in enumerate(regional_ranking):
+        item["rank"] = idx + 1
 
     matched = next(
         (r for r in regional_ranking if clean_keyword in r["name"].lower()),
@@ -576,30 +596,50 @@ def get_insight_data(
     avg_lst = matched["avg_lst"] if matched else 28.5
     avg_rain = matched["avg_rainfall"] if matched else 14000.0
     reg_name = matched["name"] if matched else clean_keyword.capitalize()
+    reg_rank = matched["rank"] if matched else 1
+    total_regs = len(regional_ranking) or 9
 
-    # Determine harvest category
-    if avg_yield >= 5.8:
-        harvest_category = "Optimal"
-        harvest_note = f"Produktivitas aktual {reg_name} ({avg_yield} ton/ha) berada di kuartil teratas provinsi Bali (+{(avg_yield - 5.5):.2f} ton/ha di atas median)."
-    elif avg_yield >= 5.2:
+    median_yield = round(
+        float(pd.Series([r["avg_productivity_ton_ha"] for r in regional_ranking]).median()), 2
+    ) if regional_ranking else 5.8
+    diff_median = round(avg_yield - median_yield, 2)
+    diff_sign = "+" if diff_median >= 0 else ""
+
+    # Determine harvest category grounded on actual provincial median & distribution
+    if avg_yield >= 6.1:
         harvest_category = "Tinggi"
-        harvest_note = f"Produktivitas terhitung {avg_yield} ton/ha memenuhi target produksi pangan daerah dengan pasokan agroklimat stabil."
-    elif avg_yield >= 4.5:
+        harvest_note = (
+            f"Produktivitas aktual {reg_name} ({avg_yield} ton/ha, peringkat #{reg_rank} dari {total_regs} wilayah) "
+            f"berada {diff_sign}{diff_median:.2f} ton/ha di atas median provinsi Bali ({median_yield} ton/ha)."
+        )
+    elif avg_yield >= 5.5:
+        harvest_category = "Optimal"
+        harvest_note = (
+            f"Produktivitas terhitung {avg_yield} ton/ha (peringkat #{reg_rank} dari {total_regs} wilayah) "
+            f"dengan selisih {diff_sign}{diff_median:.2f} ton/ha terhadap median Bali ({median_yield} ton/ha)."
+        )
+    elif avg_yield >= 4.8:
         harvest_category = "Waspada"
-        harvest_note = f"Produktivitas {avg_yield} ton/ha perlu perhatian khusus pada manajemen irigasi dan pemupukan presisi."
+        harvest_note = (
+            f"Produktivitas {avg_yield} ton/ha (peringkat #{reg_rank} dari {total_regs} wilayah) berada di bawah "
+            f"median provinsi ({median_yield} ton/ha) dan perlu perhatian manajemen air serta pemupukan."
+        )
     else:
         harvest_category = "Rendah"
-        harvest_note = f"Produktivitas berada di bawah ambang batas minimal ({avg_yield} ton/ha); disarankan evaluasi varietas dan drainase."
+        harvest_note = (
+            f"Produktivitas aktual ({avg_yield} ton/ha, peringkat #{reg_rank}) jauh di bawah median Bali ({median_yield} ton/ha); "
+            "disarankan evaluasi varietas dan drainase."
+        )
 
     headline = (
-        f"Hasil analisis model prediktif pada observasi tahun {selected_year} di {reg_name} "
-        f"mencatat rata-rata produktivitas sebesar {avg_yield} ton/ha (Kategori {harvest_category}) "
-        f"dengan indeks kanopi NDVI {avg_ndvi} dan pasokan presipitasi {avg_rain:,.0f} mm."
+        f"Data observasi tahun {selected_year} di {reg_name} mencatat rata-rata produktivitas "
+        f"{avg_yield} ton/ha (Kategori {harvest_category}) dengan indeks kehijauan NDVI {avg_ndvi}, "
+        f"suhu permukaan {avg_lst} °C, dan curah hujan {avg_rain:,.0f} mm."
     ).replace(",", ".")
 
-    # Dynamic Key Drivers derived from real agrometeorology
+    # Dynamic Key Drivers derived from real agrometeorology relative to dataset baselines
     ndvi_impact = round((avg_ndvi - 0.65) * 1.5, 2)
-    lst_impact = round((28.0 - avg_lst) * 0.08, 2)
+    lst_impact = round((29.5 - avg_lst) * 0.08, 2)
     rain_impact = round((avg_rain - 13000) / 25000 * 0.5, 2)
 
     key_drivers = [
@@ -623,121 +663,35 @@ def get_insight_data(
         },
     ]
 
-    # Parcel Templates per Regency
-    parcel_coords = [
-        {"x": 30, "y": 30, "width": 140, "height": 95},
-        {"x": 190, "y": 30, "width": 160, "height": 95},
-        {"x": 370, "y": 30, "width": 150, "height": 95},
-        {"x": 30, "y": 145, "width": 140, "height": 110},
-        {"x": 190, "y": 145, "width": 160, "height": 110},
-        {"x": 370, "y": 145, "width": 150, "height": 110},
-    ]
+    # Real monthly observations for the selected regency and year directly from dataset_records
+    reg_df = df[df["kabupaten"].str.lower().str.contains(clean_keyword, na=False)]
+    if reg_df.empty and matched:
+        reg_df = df[df["kabupaten"] == matched["name"]]
 
-    parcel_templates = {
-        "tabanan": [
-            {"block": "Blok 1A", "location": "Lahan Jatiluwih Kauh", "farmer": "I Made Kertayasa", "areaHa": 1.8, "variety": "Beras Merah Cempaka", "yield_delta": 0.05, "ndvi_delta": 0.02},
-            {"block": "Blok 2B", "location": "Lahan Jatiluwih Kangin", "farmer": "I Ketut Sudana", "areaHa": 2.2, "variety": "Inpari 32", "yield_delta": -0.05, "ndvi_delta": -0.01},
-            {"block": "Blok 3C", "location": "Lahan Penebel", "farmer": "I Wayan Arsana", "areaHa": 1.5, "variety": "Ciherang Lokal", "yield_delta": 0.12, "ndvi_delta": 0.01},
-            {"block": "Blok 4D", "location": "Lahan Marga", "farmer": "I Nyoman Suwitra", "areaHa": 2.0, "variety": "Inpari 42 Agritan", "yield_delta": -0.15, "ndvi_delta": -0.02},
-            {"block": "Blok 5E", "location": "Lahan Selemadeg", "farmer": "I Gede Wirata", "areaHa": 1.2, "variety": "Ciherang", "yield_delta": -0.22, "ndvi_delta": -0.04},
-            {"block": "Blok 6F", "location": "Lahan Kediri", "farmer": "I Gusti Putu Rai", "areaHa": 2.5, "variety": "Beras Hitam", "yield_delta": 0.18, "ndvi_delta": 0.03},
-        ],
-        "badung": [
-            {"block": "Blok 1A", "location": "Lahan Mengwi", "farmer": "I Wayan Suarta", "areaHa": 2.0, "variety": "Inpari 32", "yield_delta": 0.08, "ndvi_delta": 0.02},
-            {"block": "Blok 2B", "location": "Lahan Abiansemal", "farmer": "I Made Wardana", "areaHa": 2.4, "variety": "Ciherang", "yield_delta": 0.02, "ndvi_delta": 0.01},
-            {"block": "Blok 3C", "location": "Lahan Petang", "farmer": "I Ketut Budiasa", "areaHa": 1.6, "variety": "Inpari 42", "yield_delta": -0.18, "ndvi_delta": -0.02},
-            {"block": "Blok 4D", "location": "Lahan Sangeh", "farmer": "I Nyoman Sukadana", "areaHa": 1.9, "variety": "Inpari 32", "yield_delta": 0.14, "ndvi_delta": 0.03},
-            {"block": "Blok 5E", "location": "Lahan Mengwitani", "farmer": "I Gede Suryawan", "areaHa": 1.4, "variety": "Ciherang", "yield_delta": -0.08, "ndvi_delta": -0.01},
-            {"block": "Blok 6F", "location": "Lahan Kuta Utara", "farmer": "I Putu Arimbawa", "areaHa": 1.8, "variety": "Inpari 32", "yield_delta": -0.12, "ndvi_delta": -0.02},
-        ],
-        "bangli": [
-            {"block": "Blok 1A", "location": "Lahan Susut Kaler", "farmer": "I Wayan Mudita", "areaHa": 1.5, "variety": "Beras Merah Dataran Tinggi", "yield_delta": 0.10, "ndvi_delta": 0.02},
-            {"block": "Blok 2B", "location": "Lahan Kintamani Selatan", "farmer": "I Ketut Rencana", "areaHa": 1.8, "variety": "Beras Merah Lokal", "yield_delta": -0.15, "ndvi_delta": 0.03},
-            {"block": "Blok 3C", "location": "Lahan Tembuku", "farmer": "I Made Artawan", "areaHa": 1.4, "variety": "Inpari 24", "yield_delta": 0.06, "ndvi_delta": -0.01},
-            {"block": "Blok 4D", "location": "Lahan Kayubihi", "farmer": "I Nyoman Gunarta", "areaHa": 1.6, "variety": "Inpari 32", "yield_delta": -0.10, "ndvi_delta": -0.02},
-            {"block": "Blok 5E", "location": "Lahan Bangli Kota", "farmer": "I Gede Suwena", "areaHa": 1.3, "variety": "Ciherang", "yield_delta": 0.12, "ndvi_delta": -0.01},
-            {"block": "Blok 6F", "location": "Lahan Demulih", "farmer": "I Wayan Kertia", "areaHa": 1.7, "variety": "Beras Merah Lokal", "yield_delta": -0.08, "ndvi_delta": 0.01},
-        ],
-        "gianyar": [
-            {"block": "Blok 1A", "location": "Lahan Ubud", "farmer": "I Made Suastika", "areaHa": 1.6, "variety": "Beras Merah Organik", "yield_delta": 0.12, "ndvi_delta": 0.02},
-            {"block": "Blok 2B", "location": "Lahan Tegallalang", "farmer": "I Wayan Sudira", "areaHa": 1.9, "variety": "Ciherang Lokal", "yield_delta": -0.06, "ndvi_delta": 0.01},
-            {"block": "Blok 3C", "location": "Lahan Payangan", "farmer": "I Ketut Darsana", "areaHa": 2.1, "variety": "Inpari 32", "yield_delta": 0.15, "ndvi_delta": 0.03},
-            {"block": "Blok 4D", "location": "Lahan Tampaksiring", "farmer": "I Nyoman Suteja", "areaHa": 1.5, "variety": "Beras Hitam", "yield_delta": 0.04, "ndvi_delta": 0.00},
-            {"block": "Blok 5E", "location": "Lahan Sukawati", "farmer": "I Gede Widana", "areaHa": 2.3, "variety": "Inpari 42", "yield_delta": -0.12, "ndvi_delta": -0.02},
-            {"block": "Blok 6F", "location": "Lahan Blahbatuh", "farmer": "I Putu Sujana", "areaHa": 1.7, "variety": "Ciherang", "yield_delta": -0.05, "ndvi_delta": -0.01},
-        ],
-        "buleleng": [
-            {"block": "Blok 1A", "location": "Lahan Sukasada", "farmer": "I Gede Sumantra", "areaHa": 2.2, "variety": "Inpari 32", "yield_delta": 0.14, "ndvi_delta": 0.02},
-            {"block": "Blok 2B", "location": "Lahan Seririt", "farmer": "I Ketut Pasek", "areaHa": 2.5, "variety": "Ciherang", "yield_delta": -0.08, "ndvi_delta": -0.01},
-            {"block": "Blok 3C", "location": "Lahan Busungbiu", "farmer": "I Wayan Sukerta", "areaHa": 1.8, "variety": "Inpari 42", "yield_delta": 0.06, "ndvi_delta": 0.01},
-            {"block": "Blok 4D", "location": "Lahan Sawan", "farmer": "I Nyoman Artaya", "areaHa": 2.0, "variety": "Inpari 32", "yield_delta": 0.10, "ndvi_delta": 0.02},
-            {"block": "Blok 5E", "location": "Lahan Kubutambahan", "farmer": "I Made Sudiarsa", "areaHa": 1.9, "variety": "Ciherang Lokal", "yield_delta": -0.16, "ndvi_delta": -0.03},
-            {"block": "Blok 6F", "location": "Lahan Gerokgak", "farmer": "I Putu Darmawan", "areaHa": 2.1, "variety": "Inpari 32", "yield_delta": -0.10, "ndvi_delta": -0.02},
-        ],
-        "jembrana": [
-            {"block": "Blok 1A", "location": "Lahan Mendoyo", "farmer": "I Wayan Suarna", "areaHa": 2.1, "variety": "Inpari 32", "yield_delta": 0.10, "ndvi_delta": 0.02},
-            {"block": "Blok 2B", "location": "Lahan Negara", "farmer": "I Ketut Suwena", "areaHa": 2.4, "variety": "Ciherang", "yield_delta": 0.05, "ndvi_delta": 0.01},
-            {"block": "Blok 3C", "location": "Lahan Melaya", "farmer": "I Made Widiarta", "areaHa": 1.9, "variety": "Inpari 42", "yield_delta": -0.12, "ndvi_delta": -0.02},
-            {"block": "Blok 4D", "location": "Lahan Pekutatan", "farmer": "I Nyoman Astawa", "areaHa": 1.7, "variety": "Inpari 32", "yield_delta": 0.08, "ndvi_delta": 0.01},
-            {"block": "Blok 5E", "location": "Lahan Dangintukadaya", "farmer": "I Gede Sudarmada", "areaHa": 2.0, "variety": "Ciherang", "yield_delta": -0.04, "ndvi_delta": 0.00},
-            {"block": "Blok 6F", "location": "Lahan Yeh Embang", "farmer": "I Putu Suwirya", "areaHa": 1.8, "variety": "Inpari 32", "yield_delta": -0.07, "ndvi_delta": -0.01},
-        ],
-        "karangasem": [
-            {"block": "Blok 1A", "location": "Lahan Bebandem", "farmer": "I Wayan Mangku", "areaHa": 1.5, "variety": "Beras Merah Karangasem", "yield_delta": 0.08, "ndvi_delta": 0.02},
-            {"block": "Blok 2B", "location": "Lahan Abang", "farmer": "I Ketut Kariasa", "areaHa": 1.8, "variety": "Inpari 32", "yield_delta": -0.06, "ndvi_delta": -0.01},
-            {"block": "Blok 3C", "location": "Lahan Rendang", "farmer": "I Made Subagia", "areaHa": 1.6, "variety": "Ciherang Lokal", "yield_delta": 0.11, "ndvi_delta": 0.02},
-            {"block": "Blok 4D", "location": "Lahan Selat", "farmer": "I Nyoman Sugiartha", "areaHa": 1.7, "variety": "Inpari 42", "yield_delta": 0.04, "ndvi_delta": 0.00},
-            {"block": "Blok 5E", "location": "Lahan Sidemen", "farmer": "I Gede Artana", "areaHa": 1.4, "variety": "Beras Hitam", "yield_delta": -0.10, "ndvi_delta": -0.02},
-            {"block": "Blok 6F", "location": "Lahan Karangasem Kota", "farmer": "I Putu Sudarsana", "areaHa": 1.9, "variety": "Inpari 32", "yield_delta": -0.07, "ndvi_delta": -0.01},
-        ],
-        "klungkung": [
-            {"block": "Blok 1A", "location": "Lahan Banjarangkan", "farmer": "I Wayan Tika", "areaHa": 1.7, "variety": "Inpari 32", "yield_delta": 0.09, "ndvi_delta": 0.02},
-            {"block": "Blok 2B", "location": "Lahan Dawan", "farmer": "I Ketut Sukadana", "areaHa": 1.9, "variety": "Ciherang", "yield_delta": -0.05, "ndvi_delta": -0.01},
-            {"block": "Blok 3C", "location": "Lahan Klungkung Kota", "farmer": "I Made Suastawa", "areaHa": 1.5, "variety": "Inpari 42", "yield_delta": 0.07, "ndvi_delta": 0.01},
-            {"block": "Blok 4D", "location": "Lahan Kusamba", "farmer": "I Nyoman Darma", "areaHa": 1.6, "variety": "Inpari 32", "yield_delta": -0.11, "ndvi_delta": -0.02},
-            {"block": "Blok 5E", "location": "Lahan Takmung", "farmer": "I Gede Sumerta", "areaHa": 1.8, "variety": "Ciherang", "yield_delta": 0.04, "ndvi_delta": 0.00},
-            {"block": "Blok 6F", "location": "Lahan Gunaksa", "farmer": "I Putu Arnawa", "areaHa": 1.4, "variety": "Inpari 32", "yield_delta": -0.08, "ndvi_delta": -0.01},
-        ],
-        "denpasar": [
-            {"block": "Blok 1A", "location": "Lahan Denpasar Timur", "farmer": "I Wayan Sukarja", "areaHa": 1.2, "variety": "Inpari 32", "yield_delta": 0.08, "ndvi_delta": 0.02},
-            {"block": "Blok 2B", "location": "Lahan Denpasar Selatan", "farmer": "I Made Suartika", "areaHa": 1.4, "variety": "Ciherang", "yield_delta": -0.04, "ndvi_delta": -0.01},
-            {"block": "Blok 3C", "location": "Lahan Denpasar Utara", "farmer": "I Ketut Widana", "areaHa": 1.1, "variety": "Inpari 42", "yield_delta": 0.06, "ndvi_delta": 0.01},
-            {"block": "Blok 4D", "location": "Lahan Sanur Kauh", "farmer": "I Nyoman Sudirga", "areaHa": 1.3, "variety": "Inpari 32", "yield_delta": -0.08, "ndvi_delta": -0.02},
-            {"block": "Blok 5E", "location": "Lahan Kesiman", "farmer": "I Gede Sukadana", "areaHa": 1.0, "variety": "Ciherang", "yield_delta": 0.03, "ndvi_delta": 0.00},
-            {"block": "Blok 6F", "location": "Lahan Peguyangan", "farmer": "I Putu Kertiyasa", "areaHa": 1.2, "variety": "Inpari 32", "yield_delta": -0.05, "ndvi_delta": -0.01},
-        ],
-    }
-
-    matched_template = parcel_templates.get(clean_keyword, parcel_templates["tabanan"])
-    parcels = []
-    for idx, (p, coords) in enumerate(zip(matched_template, parcel_coords)):
-        p_yield = round(max(3.8, avg_yield + p["yield_delta"]), 2)
-        p_ndvi = round(max(0.45, min(0.85, avg_ndvi + p["ndvi_delta"])), 2)
-        p_cat = "Tinggi" if p_yield >= 5.8 else ("Optimal" if p_yield >= 5.1 else "Rendah")
-        moisture_pct = min(92, max(58, int(74 + (avg_rain - 13000) / 450)))
-
-        parcels.append({
-            "id": f"fld-{clean_keyword}-{idx + 1:02d}",
-            "fieldName": f"{p['location']} - {p['block']}",
-            "farmer": p["farmer"],
-            "areaHa": p["areaHa"],
-            "variety": p["variety"],
-            "estimatedYield": p_yield,
-            "category": p_cat,
-            "ndvi": p_ndvi,
-            "soilMoisture": f"Kecukupan Optimal ({moisture_pct}%)" if moisture_pct >= 70 else f"Defisit Air ({moisture_pct}%)",
-            "coordinates": coords,
-        })
+    monthly_observations = []
+    if not reg_df.empty and "bulan" in reg_df.columns:
+        for m, m_grp in reg_df.dropna(subset=["bulan"]).groupby("bulan"):
+            mp_raw = float(m_grp["produktivitas"].mean())
+            mp_ton = round(mp_raw / 10 if mp_raw > 20 else mp_raw, 2)
+            monthly_observations.append({
+                "month": int(m),
+                "ndvi": round(float(m_grp["ndvi"].mean()), 3),
+                "lst": round(float(m_grp["lst"].mean()), 1),
+                "rainfall": round(float(m_grp["rainfall"].mean()), 1),
+                "productivity": mp_ton,
+            })
+    monthly_observations.sort(key=lambda x: x["month"])
 
     return {
         "year": selected_year,
         "selected_region": matched,
         "regional_ranking": regional_ranking,
+        "monthly_observations": monthly_observations,
         "headlineSummary": headline,
         "harvestCategory": harvest_category,
         "harvestCategoryNote": harvest_note,
         "keyDrivers": key_drivers,
-        "parcels": parcels,
+        "parcels": [],
     }
 
 
@@ -750,15 +704,15 @@ def get_analysis_data(
     selected_year = year or 2024
     clean_keyword = (region or "tabanan").lower().replace("kota ", "").replace("kabupaten ", "").strip()
 
-    records = db.query(DatasetRecord).filter(
+    records = _latest_dataset_query(db).filter(
         DatasetRecord.kabupaten.ilike(f"%{clean_keyword}%"),
         DatasetRecord.tahun == selected_year,
     ).all()
 
     if not records:
-        records = db.query(DatasetRecord).filter(DatasetRecord.kabupaten.ilike(f"%{clean_keyword}%")).all()
+        records = _latest_dataset_query(db).filter(DatasetRecord.kabupaten.ilike(f"%{clean_keyword}%")).all()
     if not records:
-        records = db.query(DatasetRecord).all()
+        records = _latest_dataset_query(db).all()
 
     df = pd.DataFrame([
         {

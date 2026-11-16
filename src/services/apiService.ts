@@ -131,7 +131,27 @@ export const apiService = {
           harvestCategory: data.harvestCategory,
           harvestCategoryNote: data.harvestCategoryNote,
           keyDrivers: data.keyDrivers || [],
-          parcels: data.parcels && data.parcels.length > 0 ? data.parcels : getMockInsightData(regionId, year).parcels,
+          parcels: data.parcels || [],
+          regionalRanking: (data.regional_ranking || []).map((r: {
+            regionId: string;
+            name: string;
+            rank: number;
+            avg_productivity_ton_ha: number;
+            avg_ndvi: number;
+            avg_lst: number;
+            avg_rainfall: number;
+            samples: number;
+          }) => ({
+            regionId: r.regionId,
+            name: r.name,
+            rank: r.rank,
+            avgProductivityTonHa: r.avg_productivity_ton_ha,
+            avgNdvi: r.avg_ndvi,
+            avgLst: r.avg_lst,
+            avgRainfall: r.avg_rainfall,
+            samples: r.samples,
+          })),
+          monthlyObservations: data.monthly_observations || [],
         };
       }
       return getMockInsightData(regionId, year);

@@ -1,235 +1,545 @@
-import React, { useState } from 'react';
-import { FieldParcel } from '../../types';
-import { MapPin, User, Wheat, Droplets, Sparkles } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import baliRegenciesData from '../../data/baliRegencies.json';
+import { MonthlyObservation, RegencyMapMetric, RegionId } from '../../types';
+import {
+  MapPin,
+  Layers,
+  RotateCcw,
+  Sparkles,
+  ThermometerSun,
+  CloudRain,
+  Trophy,
+  CalendarDays,
+} from 'lucide-react';
 
 interface InteractiveFieldMapProps {
-  parcels: FieldParcel[];
+  selectedRegion: RegionId;
   regionName: string;
+  selectedYear: number;
+  regionalRanking: RegencyMapMetric[];
+  monthlyObservations: MonthlyObservation[];
+  onSelectRegion: (regionId: RegionId) => void;
 }
 
-export const InteractiveFieldMap: React.FC<InteractiveFieldMapProps> = ({
-  parcels,
-  regionName,
-}) => {
-  const [selectedParcel, setSelectedParcel] = useState<FieldParcel | null>(parcels[0] || null);
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 
-  const getCategoryColor = (cat: FieldParcel['category']) => {
-    switch (cat) {
-      case 'Tinggi':
-        return {
-          fill: '#287A4A',
-          border: '#164A32',
-          badgeBg: '#EDF4E5',
-          badgeText: '#287A4A',
-        };
-      case 'Optimal':
-        return {
-          fill: '#55A85F',
-          border: '#287A4A',
-          badgeBg: '#EDF4E5',
-          badgeText: '#55A85F',
-        };
-      case 'Rendah':
-        return {
-          fill: '#C96F5F',
-          border: '#A84E3F',
-          badgeBg: '#FFDAD6',
-          badgeText: '#C96F5F',
-        };
-      default:
-        return {
-          fill: '#55A85F',
-          border: '#287A4A',
-          badgeBg: '#EDF4E5',
-          badgeText: '#55A85F',
-        };
+const BALI_CENTER: [number, number] = [-8.4095, 115.1889];
+const BALI_BOUNDS: L.LatLngBoundsExpression = [
+  [-8.86, 114.42],
+  [-8.05, 115.72],
+];
+
+const getYieldColor = (tonHa?: number) => {
+  if (tonHa === undefined) return '#55A85F';
+  if (tonHa >= 6.2) return '#1B6B3A';
+  if (tonHa >= 5.8) return '#287A4A';
+  if (tonHa >= 5.2) return '#55A85F';
+  return '#D97706';
+};
+
+const getShortRegencyName = (name: string) =>
+  name.replace(/^Kabupaten\s+/i, '').replace(/^Kota\s+/i, '').trim();
+
+export const InteractiveFieldMap: React.FC<InteractiveFieldMapProps> = ({
+  selectedRegion,
+  regionName,
+  selectedYear,
+  regionalRanking,
+  monthlyObservations,
+  onSelectRegion,
+}) => {
+  const [baseLayerMode, setBaseLayerMode] = useState<'satellite' | 'street'>('satellite');
+  const [viewMode, setViewMode] = useState<'bali' | 'focused'>('focused');
+
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const labelsLayerRef = useRef<L.TileLayer | null>(null);
+  const geoJsonLayerRef = useRef<L.GeoJSON | null>(null);
+  const markersLayerRef = useRef<L.LayerGroup | null>(null);
+  const onSelectRegionRef = useRef(onSelectRegion);
+
+  useEffect(() => {
+    onSelectRegionRef.current = onSelectRegion;
+  }, [onSelectRegion]);
+
+  // Build quick lookup map: regionId -> RegencyMapMetric
+  const metricsByRegion = React.useMemo(() => {
+    const map: Record<string, RegencyMapMetric> = {};
+    for (const r of regionalRanking) {
+      map[r.regionId] = r;
     }
+    return map;
+  }, [regionalRanking]);
+
+  const activeMetric =
+    metricsByRegion[selectedRegion] ||
+    regionalRanking[0] || {
+      regionId: selectedRegion,
+      name: regionName,
+      rank: 1,
+      avgProductivityTonHa: 0,
+      avgNdvi: 0,
+      avgLst: 0,
+      avgRainfall: 0,
+      samples: 0,
+    };
+
+  // Initialize Leaflet Map once
+  useEffect(() => {
+    if (!mapContainerRef.current || mapRef.current) return;
+
+    const map = L.map(mapContainerRef.current, {
+      center: BALI_CENTER,
+      zoom: 10,
+      minZoom: 9,
+      maxZoom: 16,
+      zoomControl: false,
+      attributionControl: true,
+    });
+
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    markersLayerRef.current = L.layerGroup().addTo(map);
+    mapRef.current = map;
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      tileLayerRef.current = null;
+      labelsLayerRef.current = null;
+      geoJsonLayerRef.current = null;
+      markersLayerRef.current = null;
+    };
+  }, []);
+
+  // Switch Base Map Tiles (Esri Satellite + Labels vs OpenStreetMap)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (tileLayerRef.current) {
+      map.removeLayer(tileLayerRef.current);
+      tileLayerRef.current = null;
+    }
+    if (labelsLayerRef.current) {
+      map.removeLayer(labelsLayerRef.current);
+      labelsLayerRef.current = null;
+    }
+
+    if (baseLayerMode === 'satellite') {
+      tileLayerRef.current = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        {
+          attribution: 'Tiles &copy; Esri &mdash; Sentinel / Aerial Imagery',
+          maxZoom: 17,
+        }
+      ).addTo(map);
+
+      labelsLayerRef.current = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+        {
+          maxZoom: 17,
+          opacity: 0.85,
+        }
+      ).addTo(map);
+    } else {
+      tileLayerRef.current = L.tileLayer(
+        'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        {
+          attribution: '&copy; OpenStreetMap contributors',
+          maxZoom: 17,
+        }
+      ).addTo(map);
+    }
+  }, [baseLayerMode]);
+
+  // Render & Update 9 Bali Regency GeoJSON Polygons + Labels with real metrics
+  useEffect(() => {
+    const map = mapRef.current;
+    const markersGroup = markersLayerRef.current;
+    if (!map || !markersGroup) return;
+
+    if (geoJsonLayerRef.current) {
+      map.removeLayer(geoJsonLayerRef.current);
+    }
+    markersGroup.clearLayers();
+
+    let selectedBounds: L.LatLngBounds | null = null;
+
+    const layer = L.geoJSON(baliRegenciesData as GeoJSON.GeoJsonObject, {
+      style: (feature) => {
+        const rid = feature?.properties?.regionId as string;
+        const metric = metricsByRegion[rid];
+        const isSelected = rid === selectedRegion;
+        const fill = getYieldColor(metric?.avgProductivityTonHa);
+
+        return {
+          fillColor: fill,
+          fillOpacity: isSelected ? 0.42 : 0.28,
+          color: isSelected ? '#CFEF8A' : '#FFFFFF',
+          weight: isSelected ? 3.5 : 1.5,
+          opacity: isSelected ? 1 : 0.75,
+          dashArray: isSelected ? undefined : '3 3',
+        };
+      },
+      onEachFeature: (feature, featureLayer) => {
+        const rid = feature?.properties?.regionId as RegionId;
+        const fullName = feature?.properties?.name || rid;
+        const shortName = getShortRegencyName(fullName);
+        const metric = metricsByRegion[rid];
+
+        const tooltipHtml = metric
+          ? `
+            <div style="font-family: inherit; min-width: 175px; padding: 2px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <strong style="color:#164A32; font-size:12px;">${metric.name}</strong>
+                <span style="background:#EDF4E5; color:#287A4A; font-weight:800; font-size:10px; padding:1px 6px; border-radius:99px;">#${metric.rank}</span>
+              </div>
+              <div style="font-size:11px; color:#334436; line-height:1.5;">
+                <div>Produktivitas: <strong style="color:#164A32;">${metric.avgProductivityTonHa.toFixed(2)} ton/ha</strong></div>
+                <div>NDVI Kanopi: <strong>${metric.avgNdvi.toFixed(3)}</strong> • LST: <strong>${metric.avgLst} °C</strong></div>
+                <div>Curah Hujan: <strong>${Math.round(metric.avgRainfall).toLocaleString('id-ID')} mm</strong></div>
+              </div>
+            </div>
+          `
+          : `<strong>${fullName}</strong>`;
+
+        featureLayer.bindTooltip(tooltipHtml, {
+          sticky: true,
+          direction: 'top',
+          opacity: 0.96,
+        });
+
+        featureLayer.on({
+          mouseover: (e) => {
+            const target = e.target as L.Path;
+            target.setStyle({
+              fillOpacity: 0.55,
+              weight: 3,
+              color: '#CFEF8A',
+            });
+          },
+          mouseout: (e) => {
+            layer.resetStyle(e.target as L.Path);
+          },
+          click: () => {
+            setViewMode('focused');
+            onSelectRegionRef.current(rid);
+          },
+        });
+
+        // Compute bounds for centroid label & zoom-to-selected
+        const polyBounds = (featureLayer as L.Polygon).getBounds();
+        if (rid === selectedRegion) {
+          selectedBounds = polyBounds;
+        }
+
+        const center = polyBounds.getCenter();
+        // Slight manual nudge for Badung (very elongated N-S) so label doesn't overlap Denpasar
+        const labelPos: [number, number] =
+          rid === 'badung' ? [center.lat + 0.04, center.lng - 0.01] : [center.lat, center.lng];
+
+        const isSel = rid === selectedRegion;
+        const badgeHtml = `
+          <div style="
+            transform: translate(-50%, -50%);
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 8px;
+            border-radius: 999px;
+            font-size: 10.5px;
+            font-weight: 700;
+            cursor: pointer;
+            border: 1.5px solid ${isSel ? '#CFEF8A' : 'rgba(255,255,255,0.85)'};
+            background: ${isSel ? '#14452F' : 'rgba(255, 253, 247, 0.92)'};
+            color: ${isSel ? '#FFFFFF' : '#164A32'};
+            box-shadow: 0 2px 6px rgba(0,0,0,0.28);
+          ">
+            <span>${shortName}</span>
+            ${
+              metric
+                ? `<span style="color: ${isSel ? '#CFEF8A' : '#287A4A'}; font-weight: 800;">${metric.avgProductivityTonHa.toFixed(2)}</span>`
+                : ''
+            }
+          </div>
+        `;
+
+        const marker = L.marker(labelPos, {
+          icon: L.divIcon({
+            className: 'sipadi-regency-label',
+            html: badgeHtml,
+            iconSize: [0, 0],
+          }),
+        });
+        marker.on('click', () => {
+          setViewMode('focused');
+          onSelectRegionRef.current(rid);
+        });
+        marker.addTo(markersGroup);
+      },
+    }).addTo(map);
+
+    geoJsonLayerRef.current = layer;
+
+    if (viewMode === 'focused' && selectedBounds) {
+      map.flyToBounds(selectedBounds, {
+        padding: [36, 36],
+        maxZoom: 11,
+        duration: 0.75,
+      });
+    } else if (viewMode === 'bali') {
+      map.flyToBounds(BALI_BOUNDS, {
+        padding: [16, 16],
+        duration: 0.75,
+      });
+    }
+  }, [selectedRegion, metricsByRegion, viewMode]);
+
+  const handleSelectFromCard = (rid: RegionId) => {
+    setViewMode('focused');
+    onSelectRegion(rid);
   };
+
+  const handleResetToBali = () => {
+    setViewMode('bali');
+    mapRef.current?.flyToBounds(BALI_BOUNDS, { padding: [16, 16], duration: 0.75 });
+  };
+
+  const ndviPct = Math.min(100, Math.max(0, Math.round(activeMetric.avgNdvi * 100)));
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 bg-[#FFFDF7] p-5 sm:p-6 rounded-2xl border border-[#D8E3CC] shadow-xs">
-      {/* Interactive Cartographic Grid */}
-      <div className="flex-1 flex flex-col gap-3">
-        <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
-          <div className="flex items-center gap-2">
-            <MapPin className="w-4 h-4 text-[#287A4A]" />
-            <h4 className="font-extrabold text-[#164A32] text-sm">
-              Distribusi Spasial Petak Sawah Lahan Padi — {regionName}
-            </h4>
+      {/* Left: Interactive Real Satellite + GeoJSON Map */}
+      <div className="flex-1 flex flex-col gap-3.5 min-w-0">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-[#EDF4E5] border border-[#C8DDAF] flex items-center justify-center text-[#287A4A]">
+              <MapPin className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="font-extrabold text-[#164A32] text-sm">
+                Peta Satelit &amp; Sebaran Kabupaten Bali — {selectedYear}
+              </h4>
+              <p className="text-[11px] text-[#5F7061]">
+                Klik wilayah kabupaten mana saja pada peta untuk melihat detail data aktualnya
+              </p>
+            </div>
           </div>
-          <span className="text-[11px] text-[#5F7061] bg-[#EDF4E5] px-2.5 py-0.5 rounded-full font-medium border border-[#C8DDAF]">
-            Klik petak untuk detail agronomis
-          </span>
+
+          {/* Map Controls */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="inline-flex rounded-xl bg-[#FAF7F0] border border-[#D8E3CC] p-0.5 text-[11px] font-bold">
+              <button
+                type="button"
+                onClick={() => setBaseLayerMode('satellite')}
+                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1 ${
+                  baseLayerMode === 'satellite'
+                    ? 'bg-[#287A4A] text-white shadow-2xs'
+                    : 'text-[#5F7061] hover:text-[#164A32]'
+                }`}
+              >
+                <Layers className="w-3 h-3" />
+                Citra Satelit
+              </button>
+              <button
+                type="button"
+                onClick={() => setBaseLayerMode('street')}
+                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                  baseLayerMode === 'street'
+                    ? 'bg-[#287A4A] text-white shadow-2xs'
+                    : 'text-[#5F7061] hover:text-[#164A32]'
+                }`}
+              >
+                Peta Jalan
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleResetToBali}
+              className="px-2.5 py-1.5 rounded-xl bg-[#FAF7F0] border border-[#D8E3CC] text-[11px] font-bold text-[#164A32] hover:bg-[#EDF4E5] transition-colors cursor-pointer flex items-center gap-1"
+              title="Tampilkan seluruh Pulau Bali"
+            >
+              <RotateCcw className="w-3 h-3 text-[#287A4A]" />
+              Seluruh Bali
+            </button>
+          </div>
         </div>
 
-        {/* Map Canvas */}
-        <div className="relative w-full aspect-16/9 bg-[#F0EADB] rounded-xl border border-[#D8E3CC] overflow-hidden p-2 flex items-center justify-center shadow-inner">
-          <svg className="w-full h-full" viewBox="0 0 550 280">
-            {/* Grid pattern */}
-            <defs>
-              <pattern id="cartoGrid" width="40" height="40" patternUnits="userSpaceOnUse">
-                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#E3DCBA" strokeWidth="0.8" />
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#cartoGrid)" />
-
-            {/* Irrigation Stream Line */}
-            <path
-              d="M 10 135 C 150 135, 200 135, 540 135"
-              fill="none"
-              stroke="#4D9FC1"
-              strokeWidth="4"
-              strokeDasharray="6 4"
-            />
-            <text x="470" y="128" fill="#4D9FC1" fontSize="9" fontWeight="bold">
-              Saluran Irigasi
-            </text>
-
-            {/* Parcels */}
-            {parcels.map((parcel) => {
-              const colors = getCategoryColor(parcel.category);
-              const isSelected = selectedParcel?.id === parcel.id;
-
-              return (
-                <g
-                  key={parcel.id}
-                  onClick={() => setSelectedParcel(parcel)}
-                  className="cursor-pointer transition-all hover:opacity-90"
-                >
-                  <rect
-                    x={parcel.coordinates.x}
-                    y={parcel.coordinates.y}
-                    width={parcel.coordinates.width}
-                    height={parcel.coordinates.height}
-                    rx="8"
-                    fill={colors.fill}
-                    fillOpacity={isSelected ? 0.95 : 0.75}
-                    stroke={isSelected ? '#164A32' : colors.border}
-                    strokeWidth={isSelected ? 3 : 1.5}
-                    className="transition-all"
-                  />
-                  {/* Parcel label */}
-                  <text
-                    x={parcel.coordinates.x + 10}
-                    y={parcel.coordinates.y + 24}
-                    fill="#FFFFFF"
-                    fontSize="11"
-                    fontWeight="bold"
-                    className="select-none pointer-events-none"
-                  >
-                    {parcel.fieldName.split('-')[1]?.trim() || parcel.fieldName}
-                  </text>
-                  <text
-                    x={parcel.coordinates.x + 10}
-                    y={parcel.coordinates.y + 44}
-                    fill="#FFFDF7"
-                    fontSize="13"
-                    fontWeight="800"
-                    className="select-none pointer-events-none"
-                  >
-                    {parcel.estimatedYield} t/ha
-                  </text>
-                  <text
-                    x={parcel.coordinates.x + 10}
-                    y={parcel.coordinates.y + 64}
-                    fill="#E8F5E9"
-                    fontSize="9.5"
-                    className="select-none pointer-events-none"
-                  >
-                    {parcel.variety}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
+        {/* Leaflet Map Container (isolated stacking context so fixed header/sidebar stays on top) */}
+        <div className="relative z-0 isolate w-full h-[360px] sm:h-[420px] rounded-2xl border border-[#D8E3CC] overflow-hidden shadow-inner bg-[#E6ECE1]">
+          <div ref={mapContainerRef} className="w-full h-full" />
         </div>
 
-        {/* Legend */}
-        <div className="flex items-center gap-4 flex-wrap text-xs pt-1">
-          <span className="text-[#5F7061] font-semibold text-[11px]">Legenda Produktivitas:</span>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-md bg-[#287A4A]" />
-            <span className="text-[#164A32]">Tinggi (&gt; 5.4 ton/ha)</span>
+        {/* Choropleth Legend + Quick Regency Pills */}
+        <div className="flex flex-col gap-2.5 pt-1">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-4 flex-wrap text-xs">
+              <span className="text-[#5F7061] font-semibold text-[11px]">Warna Produktivitas:</span>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-sm bg-[#1B6B3A]" />
+                <span className="text-[#164A32] font-medium">≥ 6.2 t/ha</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-sm bg-[#287A4A]" />
+                <span className="text-[#164A32] font-medium">5.8 – 6.1 t/ha</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-sm bg-[#55A85F]" />
+                <span className="text-[#164A32] font-medium">5.2 – 5.7 t/ha</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-sm bg-[#D97706]" />
+                <span className="text-[#164A32] font-medium">&lt; 5.2 t/ha</span>
+              </div>
+            </div>
+            <span className="text-[11px] text-[#5F7061]">
+              Angka di peta adalah produktivitas rata-rata (ton/ha) tahun {selectedYear}
+            </span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-md bg-[#55A85F]" />
-            <span className="text-[#164A32]">Optimal (4.8 - 5.4)</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-md bg-[#C96F5F]" />
-            <span className="text-[#164A32]">Waspada / Rendah (&lt; 4.8)</span>
-          </div>
+
+          {/* Quick clickable regency ranking strip */}
+          {regionalRanking.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap pt-1">
+              {regionalRanking.map((reg) => {
+                const isSelected = reg.regionId === selectedRegion;
+                return (
+                  <button
+                    key={reg.regionId}
+                    type="button"
+                    onClick={() => handleSelectFromCard(reg.regionId)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer border ${
+                      isSelected
+                        ? 'bg-[#164A32] text-white border-[#164A32] shadow-2xs'
+                        : 'bg-[#FAF7F0] text-[#164A32] border-[#D8E3CC] hover:bg-[#EDF4E5]'
+                    }`}
+                  >
+                    <span className={isSelected ? 'text-[#CFEF8A] mr-1' : 'text-[#5F7061] mr-1'}>
+                      #{reg.rank}
+                    </span>
+                    {getShortRegencyName(reg.name)}{' '}
+                    <span className={isSelected ? 'text-[#CFEF8A] font-bold' : 'text-[#287A4A] font-bold'}>
+                      {reg.avgProductivityTonHa.toFixed(2)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Selected Parcel Inspector Panel */}
-      {selectedParcel && (
-        <div className="w-full lg:w-72 bg-[#FAF7F0] p-4 rounded-xl border border-[#D8E3CC] flex flex-col justify-between shadow-2xs">
-          <div className="flex flex-col gap-3">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="text-[10px] font-bold text-[#55A85F] uppercase tracking-wider">
-                  Detail Petak Sawah
-                </span>
-                <h5 className="font-extrabold text-[#164A32] text-sm mt-0.5">
-                  {selectedParcel.fieldName}
-                </h5>
-              </div>
+      {/* Right: 100% Real Telemetry & Monthly Observations Panel */}
+      <div className="w-full lg:w-84 bg-[#FAF7F0] p-5 rounded-2xl border border-[#D8E3CC] flex flex-col justify-between shadow-2xs gap-4 shrink-0">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <span className="text-[10px] font-bold text-[#287A4A] uppercase tracking-wider">
+                Data Aktual Wilayah ({selectedYear})
+              </span>
+              <h5 className="font-extrabold text-[#164A32] text-base mt-0.5 leading-snug">
+                {activeMetric.name || regionName}
+              </h5>
             </div>
+            <span className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-[#EDF4E5] text-[#164A32] border border-[#C8DDAF]">
+              <Trophy className="w-3 h-3 text-[#287A4A]" />
+              #{activeMetric.rank} di Bali
+            </span>
+          </div>
 
-            <div className="p-3 rounded-lg bg-white border border-[#D8E3CC] flex items-center justify-between">
-              <span className="text-xs text-[#5F7061]">Estimasi Hasil:</span>
-              <span className="text-lg font-black text-[#164A32]">
-                {selectedParcel.estimatedYield}{' '}
-                <small className="text-xs font-semibold text-[#5F7061]">ton/ha</small>
+          {/* Primary KPI Card */}
+          <div className="p-3.5 rounded-xl bg-white border border-[#D8E3CC] flex items-center justify-between shadow-2xs">
+            <div className="flex flex-col">
+              <span className="text-[11px] font-semibold text-[#5F7061]">Rata-rata Produktivitas</span>
+              <span className="text-[10px] text-[#5F7061]">
+                Dari {activeMetric.samples || monthlyObservations.length} data observasi bulanan
               </span>
             </div>
-
-            <div className="flex flex-col gap-2 text-xs">
-              <div className="flex items-center justify-between border-b border-[#D8E3CC]/60 pb-1.5">
-                <span className="text-[#5F7061] flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-[#287A4A]" />
-                  Petani Penggarap:
-                </span>
-                <strong className="text-[#164A32]">{selectedParcel.farmer}</strong>
-              </div>
-
-              <div className="flex items-center justify-between border-b border-[#D8E3CC]/60 pb-1.5">
-                <span className="text-[#5F7061] flex items-center gap-1.5">
-                  <Wheat className="w-3.5 h-3.5 text-[#287A4A]" />
-                  Varietas Padi:
-                </span>
-                <strong className="text-[#164A32]">{selectedParcel.variety}</strong>
-              </div>
-
-              <div className="flex items-center justify-between border-b border-[#D8E3CC]/60 pb-1.5">
-                <span className="text-[#5F7061]">Luas Petak:</span>
-                <strong className="text-[#164A32]">{selectedParcel.areaHa} Hektar</strong>
-              </div>
-
-              <div className="flex items-center justify-between border-b border-[#D8E3CC]/60 pb-1.5">
-                <span className="text-[#5F7061] flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-[#55A85F]" />
-                  Indeks NDVI:
-                </span>
-                <strong className="text-[#287A4A]">{selectedParcel.ndvi}</strong>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-[#5F7061] flex items-center gap-1.5">
-                  <Droplets className="w-3.5 h-3.5 text-[#4D9FC1]" />
-                  Status Lengas Tanah:
-                </span>
-                <strong className="text-[#164A32]">{selectedParcel.soilMoisture}</strong>
-              </div>
+            <div className="text-right">
+              <span className="text-xl font-black text-[#164A32]">
+                {activeMetric.avgProductivityTonHa.toFixed(2)}
+              </span>
+              <span className="text-xs font-bold text-[#287A4A] ml-1">ton/ha</span>
             </div>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-[#D8E3CC] text-[10px] text-[#5F7061] leading-tight">
-            Data geospasial petak terverifikasi citra multispektral Sentinel-2 resolusi spasial 10m.
+          {/* 3 Real Agroklimat Indicators */}
+          <div className="flex flex-col gap-3 p-3.5 rounded-xl bg-white border border-[#D8E3CC]">
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[#5F7061] flex items-center gap-1.5 font-medium">
+                  <Sparkles className="w-3.5 h-3.5 text-[#287A4A]" />
+                  Kehijauan Kanopi (NDVI)
+                </span>
+                <strong className="text-[#287A4A]">{activeMetric.avgNdvi.toFixed(3)}</strong>
+              </div>
+              <div className="w-full h-2 bg-[#EDF4E5] rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[#287A4A] rounded-full transition-all duration-500"
+                  style={{ width: `${ndviPct}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between text-xs pt-1 border-t border-[#D8E3CC]/60">
+              <span className="text-[#5F7061] flex items-center gap-1.5 font-medium">
+                <ThermometerSun className="w-3.5 h-3.5 text-[#D97706]" />
+                Suhu Permukaan (LST)
+              </span>
+              <strong className="text-[#164A32]">{activeMetric.avgLst.toFixed(1)} °C</strong>
+            </div>
+
+            <div className="flex items-center justify-between text-xs pt-1 border-t border-[#D8E3CC]/60">
+              <span className="text-[#5F7061] flex items-center gap-1.5 font-medium">
+                <CloudRain className="w-3.5 h-3.5 text-[#3B8DAD]" />
+                Curah Hujan Rata-rata
+              </span>
+              <strong className="text-[#164A32]">
+                {Math.round(activeMetric.avgRainfall).toLocaleString('id-ID')} mm
+              </strong>
+            </div>
           </div>
+
+          {/* Real Monthly Observations Table */}
+          {monthlyObservations.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between text-xs px-0.5">
+                <span className="font-bold text-[#164A32] flex items-center gap-1.5">
+                  <CalendarDays className="w-3.5 h-3.5 text-[#287A4A]" />
+                  Catatan Bulanan ({selectedYear})
+                </span>
+                <span className="text-[10px] text-[#5F7061]">{monthlyObservations.length} bulan</span>
+              </div>
+
+              <div className="max-h-44 overflow-y-auto rounded-xl border border-[#D8E3CC] bg-white divide-y divide-[#EDF4E5]">
+                {monthlyObservations.map((m) => (
+                  <div
+                    key={m.month}
+                    className="px-3 py-2 flex items-center justify-between text-[11px] hover:bg-[#FAF7F0] transition-colors"
+                  >
+                    <span className="font-bold text-[#164A32] w-10">
+                      {MONTH_NAMES[(m.month - 1) % 12] || `Bln ${m.month}`}
+                    </span>
+                    <span className="text-[#5F7061]">
+                      NDVI <strong className="text-[#287A4A]">{m.ndvi.toFixed(2)}</strong>
+                    </span>
+                    <span className="text-[#5F7061] hidden sm:inline">
+                      {m.lst.toFixed(1)}°C
+                    </span>
+                    <strong className="text-[#164A32] font-extrabold">
+                      {m.productivity.toFixed(2)} t/ha
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 };

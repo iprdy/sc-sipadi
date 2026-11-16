@@ -96,6 +96,25 @@ export interface FieldParcel {
   coordinates: { x: number; y: number; width: number; height: number; path?: string };
 }
 
+export interface RegencyMapMetric {
+  regionId: RegionId;
+  name: string;
+  rank: number;
+  avgProductivityTonHa: number;
+  avgNdvi: number;
+  avgLst: number;
+  avgRainfall: number;
+  samples: number;
+}
+
+export interface MonthlyObservation {
+  month: number;
+  ndvi: number;
+  lst: number;
+  rainfall: number;
+  productivity: number;
+}
+
 export interface InsightData {
   regionId: RegionId;
   year: number;
@@ -109,6 +128,8 @@ export interface InsightData {
     direction: 'positive' | 'negative';
   }[];
   parcels: FieldParcel[];
+  regionalRanking?: RegencyMapMetric[];
+  monthlyObservations?: MonthlyObservation[];
 }
 
 // Model Prediction Input and Response (For future ML integration)

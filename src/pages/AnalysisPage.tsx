@@ -58,9 +58,6 @@ export const AnalysisPage: React.FC = () => {
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#164A32]">
             EXPLAINABLE AI (XAI) PIPELINE
           </h1>
-          <span className="ml-auto text-xs font-bold text-[#287A4A] bg-[#EDF4E5] border border-[#C8DDAF] px-3 py-1 rounded-full hidden sm:inline">
-            SHAP &amp; ALE Interpretability
-          </span>
         </div>
         <p className="text-xs sm:text-sm text-[#5F7061] max-w-3xl">
           Membongkar cara kerja model prediktif XGBoost untuk wilayah <strong>{currentRegionName}</strong>. 
@@ -77,7 +74,7 @@ export const AnalysisPage: React.FC = () => {
             </div>
             <div>
               <h2 className="text-xs font-extrabold text-[#164A32] uppercase tracking-wider">
-                1. Kontribusi Nilai SHAP (Shapley Additive exPlanations)
+                Kontribusi Nilai SHAP (Shapley Additive exPlanations)
               </h2>
               <span className="text-[11px] text-[#5F7061]">
                 Menghitung seberapa banyak setiap variabel menambah (+) atau mengurangi (-) estimasi panen dari nilai baseline
@@ -111,7 +108,7 @@ export const AnalysisPage: React.FC = () => {
             </div>
             <div>
               <h2 className="text-xs font-extrabold text-[#164A32] uppercase tracking-wider">
-                2. Pola Hubungan Marjinal ALE (Accumulated Local Effects)
+                Pola Hubungan Marjinal ALE (Accumulated Local Effects)
               </h2>
               <span className="text-[11px] text-[#5F7061]">
                 Menampilkan respon model terhadap variasi fitur tanpa bias korelasi antar-variabel lingkungan
