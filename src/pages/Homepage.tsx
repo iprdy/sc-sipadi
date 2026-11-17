@@ -9,12 +9,6 @@ import {
   ShieldCheck, 
   FileDown,
   Plus,
-  Activity,
-  Layers,
-  Sprout,
-  Sun,
-  CloudRain,
-  Mountain
 } from 'lucide-react';
 
 /* ============================================================
@@ -90,68 +84,6 @@ const AnimatedReveal: React.FC<AnimatedRevealProps> = ({
 };
 
 /* ============================================================
-   Component: Animated Counter (Count up on view)
-   ============================================================ */
-interface AnimatedCounterProps {
-  end: number;
-  decimals?: number;
-  thousandSeparator?: boolean;
-  durationMs?: number;
-}
-
-const AnimatedCounter: React.FC<AnimatedCounterProps> = ({
-  end,
-  decimals = 0,
-  thousandSeparator = false,
-  durationMs = 1400
-}) => {
-  const [value, setValue] = useState(0);
-  const [ref, inView] = useInView({ threshold: 0.1 });
-  const hasAnimated = useRef(false);
-
-  useEffect(() => {
-    if (!inView || hasAnimated.current) return;
-    hasAnimated.current = true;
-
-    let startTime: number | null = null;
-    let animationFrameId: number;
-
-    const step = (timestamp: number) => {
-      if (!startTime) startTime = timestamp;
-      const progress = Math.min((timestamp - startTime) / durationMs, 1);
-      
-      // Smooth ease-out cubic
-      const easedProgress = 1 - Math.pow(1 - progress, 3);
-      setValue(easedProgress * end);
-
-      if (progress < 1) {
-        animationFrameId = requestAnimationFrame(step);
-      } else {
-        setValue(end);
-      }
-    };
-
-    animationFrameId = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [inView, end, durationMs]);
-
-  const formatNumber = (num: number) => {
-    if (thousandSeparator) {
-      const rounded = Math.round(num);
-      return rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-    }
-    const fixed = num.toFixed(decimals);
-    const parts = fixed.split('.');
-    if (parts.length > 1) {
-      return `${parts[0]},${parts[1]}`;
-    }
-    return parts[0];
-  };
-
-  return <span ref={ref}>{formatNumber(value)}</span>;
-};
-
-/* ============================================================
    Component: Polished Single-Open Mutually Exclusive FAQ Item
    ============================================================ */
 interface FAQItemProps {
@@ -219,10 +151,6 @@ export const Homepage: React.FC = () => {
   // Single-open FAQ accordion state
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
 
-  // Interactive Explainable AI state (Human-friendly, minimal numbers)
-  const [selectedFactorId, setSelectedFactorId] = useState<string>('ndvi');
-  const [selectedCurveType, setSelectedCurveType] = useState<'ndvi' | 'rain' | 'lst'>('ndvi');
-
   const handleToggleFaq = (index: number) => {
     setOpenFaqIndex(openFaqIndex === index ? null : index);
   };
@@ -239,26 +167,26 @@ export const Homepage: React.FC = () => {
   const workflowSteps = [
     {
       step: '01',
-      title: 'Akuisisi Citra Satelit',
-      desc: 'Pengunduhan citra multispektral Sentinel-2 untuk ekstraksi NDVI dan data presipitasi curah hujan CHIRPS v2.0 secara kontinu.',
+      title: 'Master Dataset',
+      desc: 'Sistem menggunakan observasi Kabupaten, tahun, bulan, NDVI, LST, Rainfall, dan Produktivitas dari Master Dataset.',
       image: '/images/workflow-satellite.jpg'
     },
     {
       step: '02',
-      title: 'Harmonisasi Spasial Lahan',
-      desc: 'Penyelarasan batas petak sawah dengan resolusi elevasi SRTM DEM 30m serta kalibrasi suhu kinetik permukaan tanah (LST).',
+      title: 'Validasi Data',
+      desc: 'Kolom, periode, nilai lingkungan, duplikasi, dan kelengkapan panel bulanan diperiksa sebelum proses training.',
       image: '/images/workflow-geospatial.jpg'
     },
     {
       step: '03',
-      title: 'Komputasi Prediksi XGBoost',
-      desc: 'Pemodelan pohon keputusan terpadu untuk memproyeksikan bobot tonase panen gabah per petak sawah sebelum masa panen tiba.',
+      title: 'Model yang Dapat Dikonfigurasi',
+      desc: 'Algoritma dan parameternya ditentukan melalui model_config.py, dengan fitur temporal yang dibangun dari riwayat aktual.',
       image: '/images/workflow-machine-learning.jpg'
     },
     {
       step: '04',
       title: 'Explainable AI (XAI)',
-      desc: 'Dekomposisi kontribusi tiap parameter agroklimat lokal dan validasi kurva efek non-linear tanpa jebakan kotak hitam.',
+      desc: 'SHAP dan ALE dihitung pada training run dan ditampilkan sebagai analisis global, bukan interpretasi petak individual.',
       image: '/images/workflow-explainable-ai.jpg'
     }
   ];
@@ -267,8 +195,8 @@ export const Homepage: React.FC = () => {
   const whySipadiCards = [
     {
       id: '01',
-      title: 'Prediksi Lebih Awal',
-      description: 'Estimasi hasil panen diketahui 3-4 minggu sebelum masa panen tiba, memberi waktu yang cukup bagi petani dan penggilingan untuk merencanakan logistik, pupuk, dan stabilisasi harga jual.',
+      title: 'Prediksi Berbasis Riwayat',
+      description: 'Endpoint prediksi menggunakan kondisi lingkungan yang diberikan dan tiga bulan produktivitas aktual sebelumnya pada wilayah yang sama.',
       bgClass: 'bg-[#F2F6ED]',
       borderClass: 'border-[#DCE7D6]',
       iconBg: 'bg-[#14452F] text-[#CFEF8A]',
@@ -276,8 +204,8 @@ export const Homepage: React.FC = () => {
     },
     {
       id: '02',
-      title: 'Pemantauan Berkala',
-      description: 'Data satelit Sentinel-2 dan iklim diperbarui otomatis berkala, mendeteksi stres air, kekurangan hara, atau anomali pertumbuhan kanopi sebelum menyebar luas.',
+      title: 'Data Master Terstruktur',
+      description: 'Setiap training run menyimpan observasi Master Dataset, termasuk target Produktivitas yang kosong sebagai NULL.',
       bgClass: 'bg-[#EEF5F8]',
       borderClass: 'border-[#D6E6EE]',
       iconBg: 'bg-[#184F6E] text-[#D8EFFF]',
@@ -285,8 +213,8 @@ export const Homepage: React.FC = () => {
     },
     {
       id: '03',
-      title: 'AI yang Terbuka',
-      description: 'Bukan kotak hitam. Setiap estimasi didampingi penjelasan variabel pendukung dan pembatasnya dalam bahasa yang mudah dipahami oleh petani dan penyuluh.',
+      title: 'Evaluasi Terukur',
+      description: 'Hasil training mencatat konfigurasi model, temporal validation, dan final test secara terpisah.',
       bgClass: 'bg-[#F9F5EC]',
       borderClass: 'border-[#ECE2D0]',
       iconBg: 'bg-[#664D14] text-[#FFE8B5]',
@@ -294,8 +222,8 @@ export const Homepage: React.FC = () => {
     },
     {
       id: '04',
-      title: 'Laporan Siap Pakai',
-      description: 'Ringkasan kondisi musim tanam dan faktor lahan per petak dapat langsung diunduh dalam format PDF siap cetak maupun data spasial untuk koordinasi dinas.',
+      title: 'Analisis yang Dapat Ditinjau',
+      description: 'SHAP dan ALE berasal dari training run tersimpan dan cakupannya dinyatakan secara eksplisit di dashboard.',
       bgClass: 'bg-[#EDF7F2]',
       borderClass: 'border-[#D2EAD9]',
       iconBg: 'bg-[#125238] text-[#D2F5E2]',
@@ -303,104 +231,21 @@ export const Homepage: React.FC = () => {
     }
   ];
 
-  // SHAP Human-Friendly Factor Explanations (Solid palette, no small borders, no eye-strain)
-  const xaiFactors = [
-    {
-      id: 'ndvi',
-      name: 'Kerapatan Daun Padi (NDVI)',
-      icon: Sprout,
-      role: 'Pendorong Terbesar',
-      roleBadgeBg: 'bg-[#205C3B] text-[#CFEF8A]',
-      summary: 'Kanopi daun hijau lebat pada umur 65 HST memaksimalkan fotosintesis pembentukan malai.',
-      fieldAdvice: 'Pertahankan kecukupan unsur hara agar pengisian bulir gabah berjalan serempak hingga matang fisiologis.'
-    },
-    {
-      id: 'rain',
-      name: 'Kecukupan Pasokan Air (CHIRPS)',
-      icon: CloudRain,
-      role: 'Faktor Pendukung',
-      roleBadgeBg: 'bg-[#18485E] text-[#9BE5FF]',
-      summary: 'Presipitasi musiman memenuhi kebutuhan transpirasi tanaman tanpa menimbulkan risiko pembusukan akar.',
-      fieldAdvice: 'Pola pembagian air irigasi berkala sudah tepat untuk menjaga kelembaban tanah pada fase bunting.'
-    },
-    {
-      id: 'dem',
-      name: 'Elevasi & Sirkulasi (DEM)',
-      icon: Mountain,
-      role: 'Kondisi Ideal',
-      roleBadgeBg: 'bg-[#2D4D3A] text-[#BEE3CC]',
-      summary: 'Ketinggian terasering memberikan gradien suhu harian yang sejuk serta sirkulasi angin yang sehat.',
-      fieldAdvice: 'Sirkulasi udara alami membantu mengurangi kelembaban berlebih yang memicu perkembangan jamur.'
-    },
-    {
-      id: 'lst',
-      name: 'Suhu Permukaan Tanah (LST)',
-      icon: Sun,
-      role: 'Faktor Pembatas',
-      roleBadgeBg: 'bg-[#632926] text-[#FFA8A3]',
-      summary: 'Suhu permukaan siang hari sedikit meningkat, memicu respirasi malam kanopi lebih cepat.',
-      fieldAdvice: 'Jaga lapisan genangan air tipis (2-3 cm) di petak sawah saat siang hari untuk meredam suhu di zona perakaran.'
-    }
-  ];
-
-  // ALE Human-Friendly Biological Response Curves (Clear Qualitative Story)
-  const aleCurves = {
-    ndvi: {
-      title: 'Pola Respon Daun Padi',
-      category: 'Kanopi Vegetasi (NDVI)',
-      path: 'M10 95 C70 90 120 70 180 35 C240 18 280 15 310 15',
-      points: [
-        { label: 'Fase Awal', x: 40, y: 92 },
-        { label: 'Fase Cepat', x: 180, y: 35 },
-        { label: 'Optimal / Jenuh', x: 280, y: 15 }
-      ],
-      insight: 'Hasil panen meningkat pesat seiring bertambahnya daun hijau, lalu stabil saat kanopi tanaman sudah menutup sempurna.',
-      benefit: 'Membantu penyuluh membedakan sawah yang masih membutuhkan nutrisi daun vs sawah yang kanopinya sudah jenuh.'
-    },
-    rain: {
-      title: 'Pola Kebutuhan Air Tanaman',
-      category: 'Curah Hujan (CHIRPS)',
-      path: 'M10 90 C60 85 120 35 170 20 C220 20 270 50 310 85',
-      points: [
-        { label: 'Kering', x: 40, y: 88 },
-        { label: 'Ideal', x: 170, y: 20 },
-        { label: 'Genangan', x: 290, y: 78 }
-      ],
-      insight: 'Kebutuhan air optimal berada di titik seimbang: defisit air memicu stres kekeringan, sedangkan air berlebih berisiko merendam perakaran.',
-      benefit: 'Memberikan dasar penyesuaian buka-tutup saluran irigasi sesuai fase kritis tanaman padi.'
-    },
-    lst: {
-      title: 'Pola Toleransi Suhu Lahan',
-      category: 'Suhu Permukaan (LST)',
-      path: 'M10 20 C90 20 160 30 220 55 C270 78 295 90 310 95',
-      points: [
-        { label: 'Sejuk', x: 50, y: 20 },
-        { label: 'Normal', x: 180, y: 38 },
-        { label: 'Terik', x: 280, y: 85 }
-      ],
-      insight: 'Padi tumbuh optimal pada suhu yang sejuk. Pada suhu terik, energi tanaman lebih banyak terpakai untuk respirasi daripada pengisian gabah.',
-      benefit: 'Mendeteksi potensi penurunan bobot bulir gabah akibat lonjakan suhu terik di siang hari.'
-    }
-  };
-
-  const currentFactor = xaiFactors.find(f => f.id === selectedFactorId) || xaiFactors[0];
-  const currentCurve = aleCurves[selectedCurveType];
-
   const faqList = [
     {
       number: '01',
       question: 'Seberapa akurat prediksi hasil panen model ini?',
-      answer: 'Berdasarkan validasi model regresi gradient boosting (XGBoost) terhadap data historis panen dan indeks kanopi Sentinel-2, sistem mencapai koefisien determinasi R² > 0,88 dengan galat estimasi (RMSE) yang rendah sebelum masa panen tiba.'
+      answer: 'Metrik dihitung dari training run yang Anda unggah. Dashboard menampilkan temporal validation dan final test secara terpisah; hasil bergantung pada data serta model_config.py dan tidak diasumsikan identik dengan notebook penelitian.'
     },
     {
       number: '02',
       question: 'Data penginderaan jauh dan agroklimat apa saja yang digunakan?',
-      answer: 'Sistem mengintegrasikan citra multispektral Sentinel-2 (NDVI kanopi vegetasi resolusi 10 m), data presipitasi curah hujan harian CHIRPS v2.0, suhu kinetik permukaan tanah (LST), dan elevasi topografi SRTM DEM.'
+      answer: 'Master Dataset memuat Kabupaten, Tahun, Bulan, NDVI, LST, Rainfall, dan Produktivitas. Produktivitas kosong tetap disimpan sebagai NULL dan tidak digunakan sebagai target supervised.'
     },
     {
       number: '03',
       question: 'Bagaimana metode Explainable AI (SHAP & ALE) membantu pengguna?',
-      answer: 'SHAP membongkar kontribusi tiap variabel iklim dan vegetasi terhadap deviasi angka panen (faktor pendorong vs pembatas), sementara ALE memetakan kurva efek marginal murni tanpa terdistorsi korelasi antar-fitur.'
+      answer: 'SHAP dan ALE dihitung untuk training run tersimpan. Analisis yang tersedia bersifat global pada run tersebut, bukan atribusi petak, rekomendasi agronomis, atau hubungan kausal.'
     },
     {
       number: '04',
@@ -448,7 +293,7 @@ export const Homepage: React.FC = () => {
             <div className="bg-white/95 backdrop-blur-md rounded-full py-2 px-4.5 text-xs sm:text-sm font-bold text-[#14452F] inline-flex items-center gap-2 border border-white/70 shadow-sm">
               <span className="w-2 h-2 rounded-full bg-[#2E9E5B]" />
               <MapPin className="w-3.5 h-3.5 text-[#14452F]" />
-              <span>Wilayah Kajian: Jatiluwih, Tabanan</span>
+              <span>Wilayah Dataset: Bali</span>
             </div>
           </div>
 
@@ -456,9 +301,9 @@ export const Homepage: React.FC = () => {
           <div className="py-6 sm:py-8 max-w-4xl">
             {/* Minimalist Technology Pill */}
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/15 backdrop-blur-md border border-white/30 text-white text-xs font-semibold mb-5 tracking-wide">
-              <span>Sentinel-2 MSI</span>
+              <span>Master Dataset</span>
               <span className="text-white/40">•</span>
-              <span>Prediksi XGBoost</span>
+              <span>Model Configurable</span>
               <span className="text-white/40">•</span>
               <span className="text-[#CFEF8A] font-bold">Explainable AI (SHAP &amp; ALE)</span>
             </div>
@@ -467,7 +312,7 @@ export const Homepage: React.FC = () => {
               Pantau produktivitas padi, pahami faktor lingkungannya.
             </h1>
             <p className="my-5 max-w-[620px] text-base sm:text-[17px] leading-relaxed text-[#E6F0E2]">
-              Integrasi citra satelit multispektral, parameter agroklimat lokal, dan model XGBoost yang dapat dijelaskan secara transparan melalui SHAP &amp; ALE.
+              SI-PADI memproses Master Dataset dengan model yang dapat dikonfigurasi, lalu menyimpan evaluasi temporal dan analisis SHAP/ALE untuk setiap training run.
             </p>
             <div className="flex flex-wrap items-center gap-3.5 pt-1">
               <button
@@ -485,62 +330,8 @@ export const Homepage: React.FC = () => {
             </div>
           </div>
 
-          {/* Bottom Telemetry Glass Cards Row with CountUp Animations */}
-          <div 
-            id="indikator" 
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 scroll-mt-24"
-          >
-            <div className="bg-white/95 backdrop-blur-md rounded-2xl p-5 border border-white/80 shadow-sm flex flex-col justify-between">
-              <div className="text-[11px] font-bold text-[#55695D] tracking-wider uppercase">
-                ESTIMASI HASIL PANEN
-              </div>
-              <div className="text-[30px] font-extrabold text-[#14452F] leading-tight my-1.5 font-display tabular-nums">
-                <AnimatedCounter end={5.21} decimals={2} /> <span className="text-xs font-semibold text-[#55695D]">ton/ha</span>
-              </div>
-              <div className="text-[12px] font-medium text-[#2E7D4F] flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#2E7D4F]" />
-                <span>+0,41 ton/ha di atas rata-rata</span>
-              </div>
-            </div>
-
-            <div className="bg-white/95 backdrop-blur-md rounded-2xl p-5 border border-white/80 shadow-sm flex flex-col justify-between">
-              <div className="text-[11px] font-bold text-[#55695D] tracking-wider uppercase">
-                NDVI KANOPI VEGETASI
-              </div>
-              <div className="text-[30px] font-extrabold text-[#14452F] leading-tight my-1.5 font-display tabular-nums">
-                <AnimatedCounter end={0.68} decimals={2} /> <span className="text-xs font-semibold text-[#55695D]">indeks</span>
-              </div>
-              <div className="text-[12px] font-medium text-[#2E7D4F] flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#2E7D4F]" />
-                <span>Kanopi lebat &amp; seragam</span>
-              </div>
-            </div>
-
-            <div className="bg-white/95 backdrop-blur-md rounded-2xl p-5 border border-white/80 shadow-sm flex flex-col justify-between">
-              <div className="text-[11px] font-bold text-[#55695D] tracking-wider uppercase">
-                SUHU PERMUKAAN (LST)
-              </div>
-              <div className="text-[30px] font-extrabold text-[#14452F] leading-tight my-1.5 font-display tabular-nums">
-                <AnimatedCounter end={27.4} decimals={1} /> <span className="text-xs font-semibold text-[#55695D]">°C</span>
-              </div>
-              <div className="text-[12px] font-medium text-[#7A6128] flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#B08832]" />
-                <span>Rentang fisiologis stabil</span>
-              </div>
-            </div>
-
-            <div className="bg-white/95 backdrop-blur-md rounded-2xl p-5 border border-white/80 shadow-sm flex flex-col justify-between">
-              <div className="text-[11px] font-bold text-[#55695D] tracking-wider uppercase">
-                CURAH HUJAN SIKLUS
-              </div>
-              <div className="text-[30px] font-extrabold text-[#14452F] leading-tight my-1.5 font-display tabular-nums">
-                <AnimatedCounter end={1820} thousandSeparator={true} /> <span className="text-xs font-semibold text-[#55695D]">mm</span>
-              </div>
-              <div className="text-[12px] font-medium text-[#1E5C7D] flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#1E5C7D]" />
-                <span>Irigasi musiman tercukupi</span>
-              </div>
-            </div>
+          <div id="indikator" className="scroll-mt-24 rounded-2xl border border-white/35 bg-white/10 p-5 text-sm text-white/90 backdrop-blur-md">
+            Nilai prediksi dan indikator aktual tidak ditampilkan sebelum tersedia dari training run dan observasi database.
           </div>
         </div>
       </section>
@@ -557,12 +348,12 @@ export const Homepage: React.FC = () => {
                 Didukung Data Satelit &amp; Metodologi Terbuka
               </div>
               <div className="flex flex-wrap items-center justify-center gap-x-8 sm:gap-x-12 gap-y-3 font-extrabold text-base sm:text-lg text-[#3E5547] tracking-tight">
-                <span>Sentinel-2 MSI</span>
-                <span>CHIRPS v2.0</span>
-                <span>SRTM DEM 30m</span>
-                <span>XGBoost Regressor</span>
-                <span>SHAP Values</span>
-                <span>ALE Curves</span>
+                <span>NDVI</span>
+                <span>LST</span>
+                <span>Rainfall</span>
+                <span>Model Configurable</span>
+                <span>SHAP</span>
+                <span>ALE</span>
               </div>
             </div>
           </AnimatedReveal>
@@ -593,7 +384,7 @@ export const Homepage: React.FC = () => {
                   ALUR KERJA SISTEM
                 </div>
                 <h2 className="mt-2 text-2xl sm:text-3xl lg:text-[36px] font-extrabold text-[#14452F] max-w-xl leading-tight font-display">
-                  Dari observasi satelit hingga rekomendasi terukur
+                  Dari Master Dataset hingga hasil analisis yang terukur
                 </h2>
               </div>
               <p className="m-0 max-w-[380px] text-sm text-[#4A5A52] leading-relaxed">
@@ -710,7 +501,7 @@ export const Homepage: React.FC = () => {
                 Dirancang untuk penyuluh, analis, dan kelompok tani
               </h2>
               <p className="mt-3 text-sm text-[#4A5A52]">
-                Empat keunggulan fungsional yang menjembatani data satelit canggih menjadi panduan praktis dan terpercaya di lapangan.
+                Fitur untuk memvalidasi dataset, membangun Model B, dan meninjau hasil evaluasi serta interpretasi training run.
               </p>
             </div>
           </AnimatedReveal>
@@ -759,245 +550,50 @@ export const Homepage: React.FC = () => {
                 METODOLOGI AI TERJELASKAN (XAI)
               </div>
               <h2 className="m-0 mb-3 text-3xl sm:text-4xl lg:text-[40px] font-extrabold text-white font-display">
-                Bagaimana Kami Membuka Kotak Hitam AI
+                Analisis dari training run tersimpan
               </h2>
               <p className="m-0 text-sm sm:text-base text-[#BBD4C3] leading-relaxed">
-                Kami tidak sekadar memberikan estimasi angka, tetapi menjelaskan alasan di balik setiap prediksi melalui dua sudut pandang: pengurai faktor lokal lahan (SHAP) dan kurva pemahaman biologis alami tanaman padi (ALE).
+                Halaman analisis menampilkan hasil SHAP dan ALE yang benar-benar dihitung oleh ML Engine. Nilainya tidak disimulasikan atau ditafsirkan sebagai rekomendasi agronomis.
               </p>
             </div>
           </AnimatedReveal>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            {/* Left Panel: SHAP Human-Friendly Factor Attribution (Col 6) */}
-            <AnimatedReveal direction="right" delayMs={100} className="lg:col-span-6 h-full">
-              <div className="bg-[#123624] rounded-3xl p-7 sm:p-8 flex flex-col justify-between h-full">
-                <div>
-                  <div className="flex justify-between items-center mb-3">
-                    <span className="text-xs font-bold text-[#CFEF8A] tracking-wider uppercase">
-                      1. FAKTOR PENENTU PADA LAHAN (SHAP)
-                    </span>
-                    <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-white/10 text-white/90">
-                      Analisis Petak
-                    </span>
-                  </div>
-                  <h3 className="m-0 text-xl font-bold font-display text-white mb-2">
-                    Faktor yang Mempengaruhi Hasil Panen
-                  </h3>
-                  <p className="text-xs sm:text-[13px] text-[#A7CDB5] leading-relaxed mb-6">
-                    Pilih salah satu faktor di bawah untuk melihat bagaimana model memahami pengaruhnya pada kondisi sawah Anda:
-                  </p>
-
-                  {/* Clean List Items (No small borders) */}
-                  <div className="flex flex-col gap-2.5">
-                    {xaiFactors.map((factor) => {
-                      const isSelected = selectedFactorId === factor.id;
-                      const IconComp = factor.icon;
-                      return (
-                        <div
-                          key={factor.id}
-                          onClick={() => setSelectedFactorId(factor.id)}
-                          className={`p-4 rounded-2xl transition-all cursor-pointer ${
-                            isSelected 
-                              ? 'bg-white/15 text-white shadow-sm' 
-                              : 'bg-transparent hover:bg-white/5 text-white/80'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-2.5">
-                              <span className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                                isSelected ? 'bg-[#CFEF8A] text-[#0C2519]' : 'bg-white/10 text-white'
-                              }`}>
-                                <IconComp className="w-4 h-4" />
-                              </span>
-                              <span className="font-bold text-sm text-white">
-                                {factor.name}
-                              </span>
-                            </div>
-                            <span className={`text-[11px] font-bold px-3 py-0.5 rounded-full ${factor.roleBadgeBg}`}>
-                              {factor.role}
-                            </span>
-                          </div>
-
-                          <div className="pl-9.5 text-xs text-[#A9C7B3] leading-relaxed">
-                            {factor.summary}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Practical Field Advice Box (No small borders) */}
-                <div className="mt-6 pt-5 bg-black/25 rounded-2xl p-5">
-                  <div className="flex items-center gap-2 text-xs font-bold text-[#CFEF8A] mb-1.5 uppercase tracking-wide">
-                    <Activity className="w-4 h-4 text-[#CFEF8A]" />
-                    <span>Rekomendasi Lapangan</span>
-                  </div>
-                  <p className="m-0 text-xs sm:text-[13.5px] text-[#D4E8DC] leading-relaxed">
-                    {currentFactor.fieldAdvice}
-                  </p>
-                </div>
-              </div>
-            </AnimatedReveal>
-
-            {/* Right Panel: ALE Biological Nature of Paddy (Col 6) */}
-            <AnimatedReveal direction="left" delayMs={150} className="lg:col-span-6 h-full">
-              <div className="bg-[#123624] rounded-3xl p-7 sm:p-8 flex flex-col justify-between h-full">
-                <div>
-                  <div className="flex justify-between items-center mb-3">
-                    <span className="text-xs font-bold text-[#CFEF8A] tracking-wider uppercase">
-                      2. SIFAT BIOLOGIS ALAMI TANAMAN (ALE)
-                    </span>
-                    <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-white/10 text-white/90">
-                      Kurva Respon Alami
-                    </span>
-                  </div>
-                  <h3 className="m-0 text-xl font-bold font-display text-white mb-2">
-                    Respons Non-Linear Tanpa Bias Data
-                  </h3>
-                  <p className="text-xs sm:text-[13px] text-[#A7CDB5] leading-relaxed mb-5">
-                    Tanaman padi memiliki batas toleransi alami. Pilih parameter untuk melihat bagaimana model memahami pola biologisnya:
-                  </p>
-
-                  {/* Clean Parameter Selector Tabs (No small borders) */}
-                  <div className="flex flex-wrap gap-2 mb-5">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCurveType('ndvi')}
-                      className={`px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                        selectedCurveType === 'ndvi'
-                          ? 'bg-white text-[#0C2519] shadow-sm'
-                          : 'bg-white/10 text-white/80 hover:bg-white/15'
-                      }`}
-                    >
-                      Kanopi Daun (NDVI)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCurveType('rain')}
-                      className={`px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                        selectedCurveType === 'rain'
-                          ? 'bg-white text-[#0C2519] shadow-sm'
-                          : 'bg-white/10 text-white/80 hover:bg-white/15'
-                      }`}
-                    >
-                      Curah Hujan (Air)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCurveType('lst')}
-                      className={`px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                        selectedCurveType === 'lst'
-                          ? 'bg-white text-[#0C2519] shadow-sm'
-                          : 'bg-white/10 text-white/80 hover:bg-white/15'
-                      }`}
-                    >
-                      Suhu Lahan (LST)
-                    </button>
-                  </div>
-
-                  {/* Minimalist Organic Response Curve Canvas (No small borders) */}
-                  <div className="bg-black/25 rounded-2xl p-5 sm:p-6">
-                    <div className="flex justify-between items-center text-xs font-bold mb-3 font-display">
-                      <span className="text-white">{currentCurve.title}</span>
-                      <span className="text-white/60 text-[11px] font-normal">{currentCurve.category}</span>
-                    </div>
-
-                    <div className="relative py-2">
-                      <svg viewBox="0 0 320 110" className="w-full h-auto overflow-visible" role="img" aria-label="Grafik Respon Biologis">
-                        {/* Soft guide line */}
-                        <line x1="10" y1="95" x2="310" y2="95" stroke="#25553C" strokeWidth="1" strokeDasharray="4 4" />
-                        
-                        {/* Smooth Organic Curve */}
-                        <path 
-                          d={currentCurve.path} 
-                          fill="none" 
-                          stroke="#CFEF8A" 
-                          strokeWidth="3.5" 
-                          strokeLinecap="round" 
-                          className="transition-all duration-500 ease-out"
-                        />
-
-                        {/* Qualitative Milestones along the curve */}
-                        {currentCurve.points.map((pt, i) => (
-                          <g key={i}>
-                            <circle 
-                              cx={pt.x} 
-                              cy={pt.y} 
-                              r="4" 
-                              fill="#FFFFFF" 
-                              stroke="#2E9E5B" 
-                              strokeWidth="2" 
-                            />
-                            <text 
-                              x={pt.x} 
-                              y={pt.y - 8} 
-                              fill="#E2EFE6" 
-                              fontSize="9" 
-                              textAnchor="middle" 
-                              fontWeight="bold"
-                            >
-                              {pt.label}
-                            </text>
-                          </g>
-                        ))}
-                      </svg>
-                    </div>
-
-                    {/* Qualitative Narrative (No small borders) */}
-                    <div className="mt-4 p-3.5 rounded-xl bg-white/5 text-xs text-[#D8EEDE] leading-relaxed">
-                      {currentCurve.insight}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Practical Value for Extension Officers (No small borders) */}
-                <div className="mt-6 pt-5 bg-black/25 rounded-2xl p-5">
-                  <div className="flex items-center gap-2 text-xs font-bold text-[#CFEF8A] mb-1.5 uppercase tracking-wide">
-                    <Layers className="w-4 h-4 text-[#CFEF8A]" />
-                    <span>Nilai Praktis di Lapangan</span>
-                  </div>
-                  <p className="m-0 text-xs sm:text-[13.5px] text-[#D4E8DC] leading-relaxed">
-                    {currentCurve.benefit}
-                  </p>
-                </div>
-              </div>
-            </AnimatedReveal>
+          <div className="mx-auto max-w-3xl rounded-3xl border border-white/10 bg-[#123624] p-7 text-center shadow-sm sm:p-9">
+            <p className="text-sm leading-relaxed text-[#D4E8DC]">
+              SHAP merangkum kontribusi fitur secara global untuk training run. ALE merangkum efek fitur pada data model. Keduanya tidak menunjukkan sebab-akibat, kondisi petak individual, atau saran budidaya.
+            </p>
+            <p className="mt-4 text-xs text-[#A7CDB5]">
+              Fitur Model B mencakup Kabupaten, Tahun, Bulan, NDVI, LST, Rainfall, lag produktivitas, rolling mean tiga bulan, serta sin/cos bulan.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard/analysis')}
+              className="mt-6 rounded-full bg-[#CFEF8A] px-6 py-3 text-sm font-bold text-[#0E3323] transition-colors hover:bg-white"
+            >
+              Buka analisis training run
+            </button>
           </div>
         </div>
       </section>
 
       {/* ============================================================
-          SECTION 7: SUARA PENGGUNA & PERTANYAAN UMUM (FRESH MINT #F2F8ED)
+          SECTION 7: CATATAN PENGGUNAAN & PERTANYAAN UMUM (FRESH MINT #F2F8ED)
           ============================================================ */}
       <section className="w-full bg-[#F2F8ED] py-20 sm:py-24 border-b border-[#DBEAD5]">
         <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
-            {/* Suara Pengguna (Col 5) */}
+            {/* Usage note (Col 5) */}
             <AnimatedReveal direction="right" className="lg:col-span-5">
               <div className="text-xs font-extrabold tracking-[0.12em] uppercase text-[#2E7D4F]">
-                SUARA PENGGUNA
+                CATATAN PENGGUNAAN
               </div>
               <h2 className="mt-2 mb-5 text-2xl sm:text-3xl font-extrabold text-[#14452F] leading-tight font-display">
-                Pengalaman dari lapangan
+                Data aktual, tanpa hasil simulasi
               </h2>
               <div className="bg-white rounded-3xl p-7 sm:p-8 border border-[#D9E5D2] shadow-sm">
-                <p className="m-0 mb-6 text-base leading-relaxed text-[#1F2D26] italic">
-                  “SIPADI sangat membantu kami dalam memantau kesehatan kanopi tanaman padi secara berkala dan memproyeksikan estimasi panen dengan alasan ilmiah yang dapat dipertanggungjawabkan kepada para petani.”
+                <p className="m-0 text-sm leading-relaxed text-[#1F2D26]">
+                  Nilai monitoring, metrik model, SHAP, ALE, dan prediksi hanya ditampilkan jika tersedia dari database atau artifact training run. Sistem tidak membuat rekomendasi agronomis otomatis.
                 </p>
-                <div className="flex items-center gap-3.5 pt-4 border-t border-[#EDF2E8]">
-                  <div className="relative w-12 h-12 rounded-full overflow-hidden border border-[#D9E2D2] shrink-0">
-                    <img 
-                      src="/images/testimonial-avatar.jpg" 
-                      alt="I Wayan Sudiarta" 
-                      className="w-full h-full object-cover" 
-                    />
-                  </div>
-                  <div>
-                    <b className="text-sm font-bold text-[#14452F] block">I Wayan Sudiarta</b>
-                    <span className="text-xs text-[#4A5A52] block">Penyuluh Pertanian Lapangan, Tabanan</span>
-                  </div>
-                </div>
               </div>
             </AnimatedReveal>
 
@@ -1067,7 +663,7 @@ export const Homepage: React.FC = () => {
             <div className="max-w-[300px]">
               <b className="font-display text-white text-2xl block mb-2 font-bold">SIPADI</b>
               <p className="m-0 text-xs sm:text-[13px] text-[#A9C7B3] leading-relaxed">
-                Sistem Prediksi dan Interpretasi Produktivitas Tanaman Padi berbasis penginderaan jauh satelit dan Explainable AI.
+                Sistem prediksi dan analisis produktivitas padi berbasis Master Dataset dan Explainable AI.
               </p>
             </div>
 
@@ -1088,10 +684,10 @@ export const Homepage: React.FC = () => {
                 Sumber Data
               </b>
               <div className="flex flex-col gap-2 text-xs sm:text-[13px]">
-                <span>Sentinel-2 MSI</span>
-                <span>CHIRPS v2.0</span>
-                <span>SRTM DEM 30m</span>
-                <span>XGBoost &amp; SHAP</span>
+                <span>Master Dataset</span>
+                <span>NDVI, LST &amp; Rainfall</span>
+                <span>Model Configurable</span>
+                <span>SHAP &amp; ALE</span>
               </div>
             </div>
 

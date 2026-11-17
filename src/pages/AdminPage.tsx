@@ -1,118 +1,89 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { 
-  Database, 
-  UploadCloud, 
-  Cpu, 
-  CheckCircle2, 
-  AlertCircle, 
-  FileSpreadsheet, 
-  Sparkles, 
-  Trophy,
-  Lock,
-  Layers,
+import React, { useState } from 'react';
+import {
+  AlertCircle,
   BarChart3,
+  CheckCircle2,
+  Cpu,
+  Database,
+  FileSpreadsheet,
+  Loader2,
+  Lock,
   RefreshCw,
-  Check,
-  Loader2
+  Sparkles,
+  UploadCloud,
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { useModelRun } from '../context/ModelRunContext';
+import { apiService } from '../services/apiService';
+import { ModelMetrics, TrainingRun } from '../types';
 
-interface MetricDetail {
-  r2: number;
-  rmse: number;
-  mae: number;
-}
-
-interface RunResult {
-  id: string;
-  filename: string;
-  rows: number;
-  best_model: string;
-  metrics: Record<string, MetricDetail>;
-  shap: Array<{ feature: string; importance: number; displayName: string }>;
-  ale: Record<string, Array<{ x: number; y: number }>>;
-  uploaded_by?: string;
-}
-
-const API_BASE_URL = '/api';
-
-const PIPELINE_STAGES = [
-  { id: 1, title: 'Validasi Dataset', desc: 'Verifikasi kolom Kabupaten, Tahun, NDVI, LST, Rainfall, Produktivitas' },
-  { id: 2, title: 'Preprocessing & Split Data', desc: 'Pembersihan nilai kosong dan pemisahan data 80% train / 20% test' },
-  { id: 3, title: 'Training XGBoost & Random Forest', desc: 'Melatih kedua arsitektur pohon keputusan ensemble secara paralel' },
-  { id: 4, title: 'Evaluasi Metrik Akurasi', desc: 'Menghitung R², RMSE, MAE dan menetapkan model terbaik' },
-  { id: 5, title: 'Analisis SHAP & Respon ALE', desc: 'Dekomposisi kontribusi atribusi fitur dan kurva efek marjinal' },
-  { id: 6, title: 'Penyimpanan Model & Metadata', desc: 'Menyimpan model ke storage dan memperbarui basis data' },
+const METRICS: Array<{ key: keyof ModelMetrics; label: string; percent?: boolean }> = [
+  { key: 'mae', label: 'MAE' },
+  { key: 'rmse', label: 'RMSE' },
+  { key: 'r2', label: 'R²' },
+  { key: 'bias', label: 'Bias' },
+  { key: 'wape_pct', label: 'WAPE', percent: true },
+  { key: 'mape_nonzero_pct', label: 'MAPE', percent: true },
+  { key: 'smape_pct', label: 'SMAPE', percent: true },
 ];
+
+const formatMetric = (
+  metrics: ModelMetrics | null,
+  key: keyof ModelMetrics,
+  percent = false,
+) => {
+  const value = metrics?.[key];
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
+  return `${value.toFixed(3)}${percent ? '%' : ''}`;
+};
+
+const formatTime = (value: string | null) => {
+  if (!value) return 'Waktu tidak tersedia';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('id-ID');
+};
+
+const modelStyle = (modelKey: TrainingRun['modelKey']) =>
+  modelKey === 'xgboost_tuned'
+    ? { accent: 'border-[#EADBAC]', badge: 'bg-[#FFF4DE] text-[#765A18]', color: '#C58B2A' }
+    : { accent: 'border-[#C8DDAF]', badge: 'bg-[#EDF4E5] text-[#164A32]', color: '#287A4A' };
 
 export const AdminPage: React.FC = () => {
   const { user, login } = useAuth();
-  const isAdmin = user?.role === 'admin' || user?.email === 'admin@sipadi.id';
-
+  const {
+    availableRuns,
+    refreshRuns,
+    loading: runsLoading,
+    error: runsError,
+  } = useModelRun();
+  const isAdmin = user?.role === 'admin';
   const [file, setFile] = useState<File | null>(null);
+  const [fileInputKey, setFileInputKey] = useState(0);
+  const [displayedBatchId, setDisplayedBatchId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [activeStep, setActiveStep] = useState<number>(0);
+  const [isReloading, setIsReloading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
-  const [result, setResult] = useState<RunResult | null>(null);
-  const [isReloading, setIsReloading] = useState(false);
-  const [justUpdated, setJustUpdated] = useState(false);
-
-  // Admin Auth state
-  const [token, setToken] = useState<string>(() => localStorage.getItem('sipadi_token') || localStorage.getItem('sipadi_admin_token') || '');
-  const [email, setEmail] = useState('admin@sipadi.id');
-  const [password, setPassword] = useState('admin123');
+  const [token, setToken] = useState(() => localStorage.getItem('sipadi_token') || '');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
 
-  const stepIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const displayRuns = availableRuns;
+  const activeBatchId = displayedBatchId || availableRuns[0]?.uploadBatchId || null;
 
-  const loadLatestRun = async (showReloadAnimation = false) => {
-    try {
-      if (showReloadAnimation) {
-        setIsReloading(true);
-      }
-      const response = await fetch(`${API_BASE_URL}/runs/latest`);
-      if (!response.ok) return;
-      const data = await response.json();
-      if (data.run) {
-        setResult(data.run);
-        if (showReloadAnimation) {
-          setJustUpdated(true);
-          setTimeout(() => setJustUpdated(false), 3500);
-        }
-      }
-    } catch {
-      // Backend offline fallback handled gracefully
-    } finally {
-      if (showReloadAnimation) {
-        setTimeout(() => setIsReloading(false), 600);
-      }
-    }
-  };
-
-  useEffect(() => {
-    loadLatestRun();
-    if (isAdmin) {
-      const activeToken = localStorage.getItem('sipadi_token') || localStorage.getItem('sipadi_admin_token') || 'demo-admin-token';
-      setToken(activeToken);
-    }
-  }, [isAdmin]);
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = async (event: React.FormEvent) => {
+    event.preventDefault();
     setAuthLoading(true);
     setAuthError('');
     try {
       const success = await login(email, password);
-      if (!success) {
-        throw new Error('Gagal melakukan autentikasi akun.');
-      }
-      const savedToken = localStorage.getItem('sipadi_token') || localStorage.getItem('sipadi_admin_token') || 'demo-admin-token';
-      setToken(savedToken);
-      setSuccessMsg('Autentikasi admin berhasil. Hak akses unggah data dan pelatihan model terbuka.');
-    } catch (err) {
-      setAuthError(err instanceof Error ? err.message : 'Koneksi ke server gagal.');
+      if (!success) throw new Error('Gagal melakukan autentikasi akun.');
+      setToken(localStorage.getItem('sipadi_token') || '');
+      setSuccessMsg('Autentikasi administrator berhasil.');
+    } catch (reason) {
+      setAuthError(reason instanceof Error ? reason.message : 'Koneksi ke server gagal.');
     } finally {
       setAuthLoading(false);
     }
@@ -120,495 +91,399 @@ export const AdminPage: React.FC = () => {
 
   const handleUploadAndTrain = async () => {
     if (!file) {
-      setError('Harap pilih berkas dataset CSV atau Excel terlebih dahulu.');
+      setError('Pilih berkas dataset CSV atau Excel terlebih dahulu.');
       return;
     }
     if (!token) {
-      setError('Silakan login sebagai administrator terlebih dahulu sebelum mengunggah dataset.');
+      setError('Silakan login sebagai administrator sebelum mengunggah dataset.');
       return;
     }
 
     setLoading(true);
     setError('');
     setSuccessMsg('');
-    setActiveStep(1);
-
-    // Simulate pipeline stage progression while server computes
-    stepIntervalRef.current = setInterval(() => {
-      setActiveStep((prev) => {
-        if (prev < 5) return prev + 1;
-        return prev;
-      });
-    }, 900);
-
-    const formData = new FormData();
-    formData.append('file', file);
-
     try {
-      const response = await fetch(`${API_BASE_URL}/admin/datasets/upload`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || 'Pelatihan model gagal diproses oleh server.');
-      }
-
-      if (stepIntervalRef.current) clearInterval(stepIntervalRef.current);
-      setActiveStep(6);
-
-      // Trigger reload animation on results panel
-      setIsReloading(true);
-      setTimeout(() => {
-        setResult(data);
-        setIsReloading(false);
-        setJustUpdated(true);
-        setTimeout(() => setJustUpdated(false), 4000);
-      }, 700);
-
-      setSuccessMsg(`Pelatihan model berhasil! Model terbaik terpilih: ${data.best_model} dari ${data.rows} baris data valid.`);
+      const uploaded = await apiService.uploadDataset(file, token);
+      setDisplayedBatchId(uploaded.uploadBatchId);
+      setSuccessMsg(
+        `Upload ${uploaded.filename} diterima: ${uploaded.rows} observasi dan ${uploaded.runs.length} hasil training.`,
+      );
       setFile(null);
-    } catch (err) {
-      if (stepIntervalRef.current) clearInterval(stepIntervalRef.current);
-      setError(err instanceof Error ? err.message : 'Gagal menghubungi server FastAPI backend.');
+      setFileInputKey((key) => key + 1);
+      try {
+        const batchRuns = await refreshRuns(uploaded.uploadBatchId);
+        if (batchRuns.length !== 2) {
+          setError('Upload selesai, tetapi pasangan Baseline dan Tuned belum dapat dimuat lengkap.');
+        }
+      } catch {
+        setError('Upload selesai, tetapi daftar run tidak dapat dimuat ulang. Coba muat ulang hasil.');
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Gagal menghubungi backend.');
     } finally {
       setLoading(false);
-      setTimeout(() => {
-        setActiveStep(0);
-      }, 5000);
+    }
+  };
+
+  const reloadBatch = async () => {
+    setIsReloading(true);
+    setError('');
+    try {
+      const runs = await refreshRuns(activeBatchId || undefined);
+      setDisplayedBatchId(runs[0]?.uploadBatchId || null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Riwayat training gagal dimuat.');
+    } finally {
+      setIsReloading(false);
     }
   };
 
   return (
-    <div className="flex flex-col gap-6 animate-fade-in pb-10">
-      {/* Title & Scope Header */}
+    <div className="flex animate-fade-in flex-col gap-6 pb-10">
       <section className="flex flex-col gap-1.5">
         <div className="flex items-center gap-3">
-          <span className="w-3.5 h-3.5 rounded-full bg-[#287A4A] ring-4 ring-[#C8DDAF]/50" />
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#164A32]">
+          <span className="h-3.5 w-3.5 rounded-full bg-[#287A4A] ring-4 ring-[#C8DDAF]/50" />
+          <h1 className="text-2xl font-extrabold tracking-tight text-[#164A32] sm:text-3xl">
             UPLOAD DATA &amp; PELATIHAN MODEL
           </h1>
-          <span className="ml-auto text-xs font-bold text-[#287A4A] bg-[#EDF4E5] border border-[#C8DDAF] px-3 py-1 rounded-full hidden sm:inline">
-            Automated ML Pipeline
+          <span className="ml-auto hidden rounded-full border border-[#C8DDAF] bg-[#EDF4E5] px-3 py-1 text-xs font-bold text-[#287A4A] sm:inline">
+            XGBoost Baseline + Tuned
           </span>
         </div>
-        <p className="text-xs sm:text-sm text-[#5F7061] max-w-3xl">
-          Unggah dataset agroklimat terstandardisasi (CSV atau Excel), jalankan validasi dataset otomatis, 
-          latih model XGBoost dan Random Forest secara paralel, dan terbitkan model terbaik ke model storage.
+        <p className="max-w-3xl text-xs text-[#5F7061] sm:text-sm">
+          Satu upload menjalankan dua eksperimen berurutan pada Master Dataset yang sama. Kedua hasil disimpan untuk dibandingkan; sistem tidak memilih pemenang otomatis.
         </p>
       </section>
 
-      {/* Access Restriction Notice if logged in as regular user */}
       {user && !isAdmin && (
-        <section className="bg-[#FAF7F0] border border-[#D8E3CC] rounded-2xl p-8 shadow-xs text-center max-w-lg mx-auto flex flex-col items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center">
-            <Lock className="w-6 h-6" />
-          </div>
+        <section className="mx-auto flex max-w-lg flex-col items-center gap-3 rounded-2xl border border-[#D8E3CC] bg-[#FAF7F0] p-8 text-center">
+          <Lock className="h-8 w-8 text-amber-800" />
           <h2 className="text-lg font-bold text-[#164A32]">Halaman Khusus Administrator</h2>
-          <p className="text-xs text-[#5F7061] max-w-sm">
-            Anda saat ini masuk sebagai <strong>{user.name}</strong> ({user.role || 'Pengguna'}). Hak akses untuk mengunggah dataset dan melatih model machine learning hanya diberikan kepada akun Administrator.
+          <p className="max-w-sm text-xs text-[#5F7061]">
+            Akun {user.name} ({user.role || 'Pengguna'}) tidak memiliki hak unggah dataset dan training.
           </p>
-          <div className="pt-2 flex flex-col gap-2 w-full">
-            <button
-              onClick={async () => {
-                await login('admin@sipadi.id', 'admin123');
-              }}
-              className="w-full py-2.5 px-4 rounded-xl bg-[#287A4A] text-white text-xs font-bold hover:bg-[#164A32] transition-colors cursor-pointer"
-            >
-              Beralih ke Akun Administrator (admin@sipadi.id)
-            </button>
-          </div>
         </section>
       )}
 
-      {/* Admin Login Box (if unauthenticated) */}
       {!user && (
-        <section className="bg-[#FAF7F0] border border-[#D8E3CC] rounded-2xl p-6 sm:p-8 shadow-xs">
-          <div className="max-w-md mx-auto">
-            <div className="flex items-center gap-3 mb-4 text-[#164A32]">
-              <div className="p-3 bg-[#EAF2E1] rounded-2xl">
-                <Lock className="w-6 h-6 text-[#287A4A]" />
-              </div>
+        <section className="rounded-2xl border border-[#D8E3CC] bg-[#FAF7F0] p-6 shadow-xs sm:p-8">
+          <div className="mx-auto max-w-md">
+            <div className="mb-4 flex items-center gap-3 text-[#164A32]">
+              <Lock className="h-6 w-6 text-[#287A4A]" />
               <div>
                 <h2 className="text-lg font-bold">Autentikasi Administrator</h2>
-                <p className="text-xs text-[#5F7061]">Masukkan kredensial admin untuk membuka akses pelatihan model.</p>
+                <p className="text-xs text-[#5F7061]">Masuk untuk mengunggah dan melatih model.</p>
               </div>
             </div>
-
             <form onSubmit={handleLogin} className="flex flex-col gap-4">
-              <div>
-                <label className="block text-xs font-bold text-[#164A32] mb-1">Email Administrator</label>
+              <label className="text-xs font-bold text-[#164A32]">
+                Email Administrator
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8E3CC] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#287A4A]"
+                  onChange={(event) => setEmail(event.target.value)}
+                  className="mt-1 w-full rounded-xl border border-[#D8E3CC] bg-white px-3.5 py-2.5 text-sm"
                   required
                 />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-[#164A32] mb-1">Kata Sandi</label>
+              </label>
+              <label className="text-xs font-bold text-[#164A32]">
+                Kata Sandi
                 <input
                   type="password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8E3CC] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#287A4A]"
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="mt-1 w-full rounded-xl border border-[#D8E3CC] bg-white px-3.5 py-2.5 text-sm"
                   required
                 />
-                <p className="text-[11px] text-[#5F7061] mt-1">
-                  Default kredensial: <span className="font-mono text-[#287A4A]">admin@sipadi.id</span> / <span className="font-mono text-[#287A4A]">admin123</span>
-                </p>
-              </div>
-
-              {authError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{authError}</span>
-                </div>
-              )}
-
+              </label>
+              {authError && <p className="text-xs text-red-700">{authError}</p>}
               <button
                 type="submit"
                 disabled={authLoading}
-                className="w-full py-2.5 px-4 bg-[#287A4A] hover:bg-[#164A32] text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
+                className="rounded-xl bg-[#287A4A] px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60"
               >
-                {authLoading ? 'Memverifikasi...' : 'Masuk sebagai Admin'}
+                {authLoading ? 'Memverifikasi…' : 'Masuk sebagai Admin'}
               </button>
             </form>
           </div>
         </section>
       )}
 
-      {/* Main Workspace (Enabled once authenticated as admin) */}
       {isAdmin && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Upload Column (5 cols) */}
-          <div className="lg:col-span-5 flex flex-col gap-5">
-            <div className="bg-[#FAF7F0] border border-[#D8E3CC] rounded-2xl p-5 sm:p-6 shadow-xs flex flex-col gap-5">
-              <div className="flex items-center justify-between border-b border-[#D8E3CC] pb-3">
-                <div className="flex items-center gap-2 text-[#164A32] font-bold text-sm">
-                  <Database className="w-4 h-4 text-[#287A4A]" />
-                  <span>Unggah Dataset Baru</span>
-                </div>
-                <span className="text-[11px] font-semibold text-[#287A4A] bg-[#EDF4E5] border border-[#C8DDAF] px-2.5 py-0.5 rounded-full">
-                  CSV / Excel
-                </span>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          <section className="flex flex-col gap-5 rounded-2xl border border-[#D8E3CC] bg-[#FAF7F0] p-5 shadow-xs lg:col-span-5 sm:p-6">
+            <div className="flex items-center justify-between border-b border-[#D8E3CC] pb-3">
+              <div className="flex items-center gap-2 text-sm font-bold text-[#164A32]">
+                <Database className="h-4 w-4 text-[#287A4A]" />
+                <span>Unggah Dataset Baru</span>
               </div>
+              <span className="rounded-full border border-[#C8DDAF] bg-[#EDF4E5] px-2.5 py-0.5 text-[11px] font-semibold text-[#287A4A]">
+                CSV / Excel
+              </span>
+            </div>
 
-              {/* Required Columns Notice */}
-              <div className="p-3.5 bg-white border border-[#E0ECD1] rounded-xl flex flex-col gap-1.5">
-                <p className="text-xs font-bold text-[#164A32] flex items-center gap-1.5">
-                  <Layers className="w-4 h-4 text-[#287A4A]" />
-                  Kolom Wajib Terstandardisasi:
+            <div className="rounded-xl border border-[#D8E3CC] bg-white p-3.5">
+              <p className="text-xs font-bold text-[#164A32]">Kolom Master Dataset</p>
+              <p className="mt-1 text-[10px] leading-relaxed text-[#5F7061]">
+                Kabupaten, Tahun, Bulan, Luas_Panen_ha, Produksi_ton, Produktivitas, NDVI, LST, Rainfall, Status_LST
+              </p>
+              <p className="mt-1 text-[10px] text-[#5F7061]">Nilai target Produktivitas boleh kosong.</p>
+            </div>
+
+            <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#C8DDAF] bg-white p-6 text-center transition-colors hover:border-[#287A4A] hover:bg-[#F4F8EE]">
+              <UploadCloud className="h-9 w-9 text-[#287A4A]" />
+              <span className="text-sm font-bold text-[#164A32]">
+                {file ? file.name : 'Pilih Berkas CSV atau Excel'}
+              </span>
+              <span className="text-xs text-[#5F7061]">
+                {file ? `${(file.size / 1024).toFixed(1)} KB` : 'Klik untuk mencari berkas'}
+              </span>
+              <input
+                key={fileInputKey}
+                className="hidden"
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                onChange={(event) => setFile(event.target.files?.[0] || null)}
+              />
+            </label>
+
+            {error && (
+              <div role="alert" className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+            {successMsg && (
+              <div role="status" className="flex items-start gap-2 rounded-xl border border-green-200 bg-green-50 p-3 text-xs text-green-800">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#287A4A]" />
+                <span>{successMsg}</span>
+              </div>
+            )}
+            {runsError && !error && (
+              <p className="text-xs text-amber-800">{runsError}</p>
+            )}
+            <button
+              type="button"
+              disabled={loading || !file || !token}
+              onClick={handleUploadAndTrain}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#287A4A] px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-[#164A32] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Melatih Baseline lalu Tuned...</span>
+                </>
+              ) : (
+                <>
+                  <Cpu className="h-4 w-4" />
+                  <span>Validasi &amp; Latih Dua Model</span>
+                </>
+              )}
+            </button>
+            {loading && (
+              <p className="text-center text-[11px] text-[#5F7061]">
+                Permintaan upload tunggal sedang diproses backend secara berurutan.
+              </p>
+            )}
+          </section>
+
+          <section className="flex min-h-[460px] flex-col gap-5 rounded-2xl border border-[#D8E3CC] bg-[#FAF7F0] p-5 shadow-xs lg:col-span-7 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#D8E3CC] pb-3">
+              <div>
+                <h2 className="text-sm font-extrabold text-[#164A32]">Hasil Training per Model</h2>
+                <p className="text-[11px] text-[#5F7061]">
+                  Batch: <span className="font-mono">{activeBatchId || 'belum tersedia'}</span>
                 </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {['Kabupaten', 'Tahun', 'Bulan', 'NDVI', 'LST', 'Rainfall', 'Produktivitas'].map((col) => (
-                    <span
-                      key={col}
-                      className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-[#EDF4E5] text-[#164A32] font-semibold border border-[#D8E3CC]"
-                    >
-                      {col}
-                    </span>
-                  ))}
-                </div>
               </div>
-
-              {/* Dropzone */}
-              <label className="border-2 border-dashed border-[#C8DDAF] hover:border-[#287A4A] rounded-xl p-6 text-center cursor-pointer bg-white hover:bg-[#F4F8EE] transition-all flex flex-col items-center justify-center gap-2">
-                <UploadCloud className="w-9 h-9 text-[#287A4A]" />
-                <span className="text-sm font-bold text-[#164A32]">
-                  {file ? file.name : 'Pilih Berkas CSV atau Excel'}
-                </span>
-                <span className="text-xs text-[#5F7061]">
-                  {file ? `${(file.size / 1024).toFixed(1)} KB` : 'Klik untuk mencari berkas di perangkat Anda'}
-                </span>
-                <input
-                  className="hidden"
-                  type="file"
-                  accept=".csv,.xlsx,.xls"
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
-                />
-              </label>
-
-              {/* Alerts */}
-              {error && (
-                <div className="flex items-start gap-2.5 text-xs text-red-700 bg-red-50 border border-red-200 p-3.5 rounded-xl">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>{error}</span>
-                </div>
-              )}
-
-              {successMsg && (
-                <div className="flex items-start gap-2.5 text-xs text-green-800 bg-green-50 border border-green-200 p-3.5 rounded-xl">
-                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-[#287A4A]" />
-                  <span>{successMsg}</span>
-                </div>
-              )}
-
-              {/* Action Button */}
               <button
-                disabled={loading || !file || !token}
-                onClick={handleUploadAndTrain}
-                className="w-full py-3 px-4 rounded-xl bg-[#287A4A] hover:bg-[#164A32] text-white font-bold text-sm shadow-xs transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                type="button"
+                onClick={reloadBatch}
+                disabled={isReloading || runsLoading}
+                aria-label="Muat ulang hasil training"
+                className="rounded-xl border border-[#D8E3CC] bg-white p-2 text-[#287A4A] disabled:opacity-60"
               >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin text-white" />
-                    <span>Mengeksekusi Pipeline ML...</span>
-                  </>
-                ) : (
-                  <>
-                    <Cpu className="w-4 h-4" />
-                    <span>Validasi &amp; Latih Model</span>
-                  </>
-                )}
+                <RefreshCw className={`h-4 w-4 ${isReloading ? 'animate-spin' : ''}`} />
               </button>
+            </div>
 
-              {/* Animated Pipeline Stage Indicator */}
-              {(loading || activeStep > 0) && (
-                <div className="mt-1 pt-4 border-t border-[#D8E3CC] flex flex-col gap-2.5 animate-fade-in">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-extrabold text-[#164A32] uppercase tracking-wider flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-[#287A4A]" />
-                      Tahap Pipeline Sedang Berjalan:
-                    </span>
-                    <span className="text-[11px] font-bold text-[#287A4A] bg-[#EDF4E5] px-2 py-0.5 rounded-md">
-                      Tahap {activeStep} / {PIPELINE_STAGES.length}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-col gap-2 bg-white p-3.5 rounded-xl border border-[#D8E3CC]">
-                    {PIPELINE_STAGES.map((stage) => {
-                      const isCompleted = activeStep > stage.id || (activeStep === 6 && stage.id === 6);
-                      const isCurrent = activeStep === stage.id && loading;
-
-                      return (
-                        <div
-                          key={stage.id}
-                          className={`flex items-start gap-2.5 p-2 rounded-lg transition-all ${
-                            isCurrent
-                              ? 'bg-[#EDF4E5] border border-[#C8DDAF]'
-                              : isCompleted
-                              ? 'opacity-85'
-                              : 'opacity-40'
-                          }`}
-                        >
-                          <div className="mt-0.5 shrink-0">
-                            {isCompleted ? (
-                              <div className="w-5 h-5 rounded-full bg-[#287A4A] text-white flex items-center justify-center shadow-xs">
-                                <Check className="w-3 h-3 stroke-[3]" />
-                              </div>
-                            ) : isCurrent ? (
-                              <div className="w-5 h-5 rounded-full bg-[#EDF4E5] border-2 border-[#287A4A] flex items-center justify-center animate-pulse">
-                                <Loader2 className="w-3 h-3 text-[#287A4A] animate-spin" />
-                              </div>
-                            ) : (
-                              <div className="w-5 h-5 rounded-full bg-[#F0EADB] text-[#5F7061] text-[10px] font-bold flex items-center justify-center">
-                                {stage.id}
-                              </div>
-                            )}
+            {runsLoading && displayRuns.length === 0 ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+                <Loader2 className="h-7 w-7 animate-spin text-[#287A4A]" />
+                <p className="text-sm text-[#5F7061]">Memuat batch training terbaru...</p>
+              </div>
+            ) : displayRuns.length !== 2 ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+                <FileSpreadsheet className="h-12 w-12 text-[#287A4A]/50" />
+                <p className="text-sm font-semibold text-[#164A32]">Pasangan model belum tersedia.</p>
+                <p className="max-w-md text-xs text-[#5F7061]">
+                  {runsError || 'Unggah Master Dataset untuk membuat Baseline dan Tuned pada batch yang sama.'}
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                  {displayRuns.map((run) => {
+                    const style = modelStyle(run.modelKey);
+                    const params = run.modelParams?.params || {};
+                    const maxImportance = Math.max(
+                      ...run.shapFeatures.map((feature) => feature.importance),
+                      0,
+                    );
+                    return (
+                      <article key={run.runId} className={`flex flex-col gap-4 rounded-2xl border bg-white p-4 ${style.accent}`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${style.badge}`}>
+                              {run.modelKey === 'xgboost_tuned' ? 'XGBoost Tuned' : 'XGBoost Baseline'}
+                            </span>
+                            <h3 className="mt-2 text-sm font-extrabold text-[#164A32]">{run.modelName}</h3>
                           </div>
+                          <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${
+                            run.artifactStatus === 'available'
+                              ? 'bg-green-50 text-green-800'
+                              : run.artifactStatus === 'missing'
+                                ? 'bg-red-50 text-red-800'
+                                : 'bg-gray-100 text-gray-700'
+                          }`}>
+                            Artifact: {run.artifactStatus === 'available' ? 'tersedia' : run.artifactStatus === 'missing' ? 'tidak ditemukan' : 'status tidak diketahui'}
+                          </span>
+                        </div>
+                        <dl className="grid grid-cols-2 gap-2 text-[11px]">
+                          <div>
+                            <dt className="text-[#5F7061]">Run ID</dt>
+                            <dd className="break-all font-mono text-[#164A32]">{run.runId}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-[#5F7061]">Training time</dt>
+                            <dd className="font-semibold text-[#164A32]">{formatTime(run.createdAt)}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-[#5F7061]">Observasi</dt>
+                            <dd className="font-bold text-[#164A32]">{run.rows}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-[#5F7061]">Supervised rows</dt>
+                            <dd className="font-bold text-[#164A32]">{run.supervisedRows}</dd>
+                          </div>
+                        </dl>
 
-                          <div className="flex flex-col">
-                            <span
-                              className={`text-xs ${
-                                isCurrent
-                                  ? 'font-extrabold text-[#164A32]'
-                                  : isCompleted
-                                  ? 'font-bold text-[#164A32]'
-                                  : 'font-medium text-[#5F7061]'
-                              }`}
-                            >
-                              {stage.title}
-                            </span>
-                            <span className="text-[10px] text-[#5F7061] leading-tight">
-                              {stage.desc}
-                            </span>
+                        <div>
+                          <h4 className="mb-2 text-[11px] font-extrabold uppercase tracking-wide text-[#164A32]">Parameter estimator</h4>
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-xl bg-[#FAF7F0] p-3 text-[10px]">
+                            {Object.entries(params).map(([name, value]) => (
+                              <div key={name} className="flex justify-between gap-2">
+                                <span className="text-[#5F7061]">{name}</span>
+                                <span className="font-mono font-semibold text-[#164A32]">{String(value)}</span>
+                              </div>
+                            ))}
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
 
-          {/* Results Column (7 cols) with Dynamic Reload Animation */}
-          <div className="lg:col-span-7">
-            <div
-              className={`bg-[#FAF7F0] border rounded-2xl p-5 sm:p-6 shadow-xs min-h-[460px] flex flex-col relative transition-all duration-500 ${
-                isReloading
-                  ? 'border-[#287A4A] opacity-60 scale-[0.99]'
-                  : justUpdated
-                  ? 'border-[#287A4A] ring-2 ring-[#287A4A]/30 shadow-md'
-                  : 'border-[#D8E3CC]'
-              }`}
-            >
-              {/* Reloading Overlay Spinner */}
-              {isReloading && (
-                <div className="absolute inset-0 bg-[#FAF7F0]/85 backdrop-blur-[2px] rounded-2xl z-20 flex flex-col items-center justify-center gap-3">
-                  <RefreshCw className="w-8 h-8 text-[#287A4A] animate-spin" />
-                  <span className="text-xs font-bold text-[#164A32] tracking-wide">
-                    Memperbarui data &amp; metrik model terbaru...
-                  </span>
-                </div>
-              )}
-
-              {!result ? (
-                <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-[#5F7061]">
-                  <FileSpreadsheet className="w-12 h-12 text-[#287A4A]/40 mb-3" />
-                  <p className="text-sm font-semibold text-[#164A32]">Belum ada hasil pelatihan model.</p>
-                  <p className="text-xs text-[#5F7061] mt-1 max-w-sm">
-                    Unggah dataset di panel sebelah kiri untuk memulai pipeline validasi, training XGBoost vs Random Forest, dan komputasi XAI.
-                  </p>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-6 animate-fade-in">
-                  {/* Result Header */}
-                  <div className="flex items-center justify-between pb-4 border-b border-[#D8E3CC] flex-wrap gap-2">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#287A4A] bg-[#EDF4E5] border border-[#C8DDAF] px-2.5 py-0.5 rounded-full">
-                          Model Aktif Terdaftar
-                        </span>
-                        {justUpdated && (
-                          <span className="text-[10px] font-bold text-white bg-[#287A4A] px-2 py-0.5 rounded-full animate-bounce">
-                            Baru Saja Diperbarui
-                          </span>
-                        )}
-                      </div>
-                      <h2 className="text-base sm:text-lg font-extrabold text-[#164A32] mt-1 flex items-center gap-2">
-                        <CheckCircle2 className="w-5 h-5 text-[#287A4A]" />
-                        {result.filename}
-                      </h2>
-                      <p className="text-xs text-[#5F7061]">
-                        ID Run: <span className="font-mono">{result.id.slice(0, 12)}...</span>
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <span className="text-xs font-semibold text-[#5F7061]">Data Valid</span>
-                        <p className="text-lg font-black text-[#164A32]">
-                          {result.rows} <span className="text-xs font-normal">baris</span>
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => loadLatestRun(true)}
-                        title="Muat ulang metrik model"
-                        className="p-2 rounded-xl bg-white border border-[#D8E3CC] text-[#287A4A] hover:bg-[#EDF4E5] transition-all cursor-pointer shadow-2xs"
-                      >
-                        <RefreshCw className={`w-4 h-4 ${isReloading ? 'animate-spin' : ''}`} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Best Model Badge */}
-                  <div className="p-4 rounded-xl bg-gradient-to-r from-[#EDF4E5] to-[#F7FAF2] border border-[#C8DDAF] flex items-center justify-between shadow-2xs">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2.5 bg-[#287A4A] text-white rounded-xl shadow-xs">
-                        <Trophy className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <span className="text-xs text-[#5F7061] font-semibold">Model Terbaik Terpilih</span>
-                        <h3 className="text-lg font-black text-[#164A32]">{result.best_model}</h3>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-xs text-[#5F7061] font-semibold">R² Pengujian</span>
-                      <p className="text-xl font-black text-[#287A4A]">
-                        {result.metrics[result.best_model]?.r2.toFixed(4) || '—'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Comparative Table */}
-                  <div className="flex flex-col gap-2.5">
-                    <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#164A32] flex items-center gap-2">
-                      <BarChart3 className="w-4 h-4 text-[#287A4A]" />
-                      Perbandingan Metrik Evaluasi Model
-                    </h3>
-                    <div className="overflow-x-auto rounded-xl border border-[#D8E3CC] bg-white">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="bg-[#EDF4E5] text-left text-[#164A32] border-b border-[#D8E3CC]">
-                            <th className="py-2.5 px-3.5 font-bold">Algoritma</th>
-                            <th className="py-2.5 px-3.5 font-bold">R² (Koef. Determ.)</th>
-                            <th className="py-2.5 px-3.5 font-bold">RMSE (ku/ha)</th>
-                            <th className="py-2.5 px-3.5 font-bold">MAE (ku/ha)</th>
-                            <th className="py-2.5 px-3.5 font-bold">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {Object.entries(result.metrics).map(([modelName, metric]) => {
-                            const isWinner = modelName === result.best_model;
-                            return (
-                              <tr
-                                key={modelName}
-                                className={`border-b last:border-b-0 border-[#E8EFE0] ${
-                                  isWinner ? 'bg-[#EDF4E5]/50 font-semibold' : ''
-                                }`}
-                              >
-                                <td className="py-2.5 px-3.5 text-[#164A32] font-bold">{modelName}</td>
-                                <td className="py-2.5 px-3.5 font-mono">{metric.r2.toFixed(4)}</td>
-                                <td className="py-2.5 px-3.5 font-mono">{metric.rmse.toFixed(4)}</td>
-                                <td className="py-2.5 px-3.5 font-mono">{metric.mae.toFixed(4)}</td>
-                                <td className="py-2.5 px-3.5">
-                                  {isWinner ? (
-                                    <span className="px-2 py-0.5 rounded-full bg-[#287A4A] text-white text-[10px] font-bold shadow-2xs">
-                                      Terpilih (Juara)
-                                    </span>
-                                  ) : (
-                                    <span className="text-[#5F7061] text-[10px] font-medium">Evaluated</span>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  {/* SHAP Feature Importance */}
-                  <div className="flex flex-col gap-2.5">
-                    <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#164A32] flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-[#287A4A]" />
-                      Kontribusi Fitur Terpenting (SHAP Analysis)
-                    </h3>
-                    <div className="flex flex-col gap-2.5 bg-white p-4 rounded-xl border border-[#D8E3CC]">
-                      {result.shap.map((item) => {
-                        const maxImportance = Math.max(...result.shap.map((x) => x.importance)) || 1;
-                        const percentage = Math.max(5, (item.importance / maxImportance) * 100);
-                        return (
-                          <div key={item.feature} className="flex flex-col gap-1">
-                            <div className="flex justify-between text-xs font-semibold">
-                              <span className="text-[#164A32]">{item.displayName || item.feature}</span>
-                              <span className="font-mono text-[#287A4A] font-bold">
-                                {item.importance.toFixed(4)}
-                              </span>
+                        <div className="grid grid-cols-2 gap-3">
+                          {[
+                            ['Temporal validation', run.temporalValidationMetrics],
+                            ['Final test 2025', run.finalTestMetrics],
+                          ].map(([label, metrics]) => (
+                            <div key={label as string} className="rounded-xl border border-[#E8EFE0] p-3">
+                              <h4 className="mb-2 text-[10px] font-extrabold text-[#164A32]">{label as string}</h4>
+                              <p className="text-[10px] text-[#5F7061]">
+                                MAE <strong className="text-[#164A32]">{formatMetric(metrics as ModelMetrics | null, 'mae')}</strong>
+                                <span className="mx-1">·</span>
+                                RMSE <strong className="text-[#164A32]">{formatMetric(metrics as ModelMetrics | null, 'rmse')}</strong>
+                              </p>
+                              <p className="mt-1 text-[10px] text-[#5F7061]">
+                                R² <strong className="text-[#164A32]">{formatMetric(metrics as ModelMetrics | null, 'r2')}</strong>
+                                <span className="mx-1">·</span>
+                                Bias <strong className="text-[#164A32]">{formatMetric(metrics as ModelMetrics | null, 'bias')}</strong>
+                              </p>
                             </div>
-                            <div className="w-full h-2.5 bg-[#EDF4E5] rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-gradient-to-r from-[#287A4A] to-[#369C5F] rounded-full transition-all duration-500"
-                                style={{ width: `${percentage}%` }}
-                              />
+                          ))}
+                        </div>
+
+                        {run.shapFeatures.length > 0 && (
+                          <div>
+                            <h4 className="mb-2 flex items-center gap-1 text-[10px] font-extrabold uppercase text-[#164A32]">
+                              <Sparkles className="h-3.5 w-3.5 text-[#287A4A]" />
+                              SHAP global · run ini
+                            </h4>
+                            <div className="flex flex-col gap-2">
+                              {run.shapFeatures.slice(0, 3).map((feature) => (
+                                <div key={feature.id}>
+                                  <div className="flex justify-between text-[10px]">
+                                    <span>{feature.name}</span>
+                                    <span>{feature.importance.toFixed(3)}</span>
+                                  </div>
+                                  <div className="mt-1 h-1.5 rounded-full bg-[#EDF4E5]">
+                                    <div
+                                      className="h-1.5 rounded-full"
+                                      style={{
+                                        width: `${maxImportance > 0 ? (feature.importance / maxImportance) * 100 : 0}%`,
+                                        backgroundColor: style.color,
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+                        )}
+                      </article>
+                    );
+                  })}
                 </div>
-              )}
-            </div>
-          </div>
+
+                <div className="flex flex-col gap-3">
+                  <h3 className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-[#164A32]">
+                    <BarChart3 className="h-4 w-4 text-[#287A4A]" />
+                    Tabel Perbandingan Metrik
+                  </h3>
+                  <div className="overflow-x-auto rounded-xl border border-[#D8E3CC] bg-white">
+                    <table className="w-full min-w-[760px] text-xs">
+                      <thead className="bg-[#EDF4E5] text-left text-[#164A32]">
+                        <tr>
+                          <th className="px-3 py-2.5">Evaluasi / Metrik</th>
+                          {displayRuns.map((run) => (
+                            <th key={run.runId} colSpan={2} className="px-3 py-2.5 text-center">
+                              {run.modelKey === 'xgboost_tuned' ? 'XGBoost Tuned' : 'XGBoost Baseline'}
+                            </th>
+                          ))}
+                        </tr>
+                        <tr className="border-t border-[#D8E3CC]">
+                          <th className="px-3 py-2" />
+                          {displayRuns.map((run) => (
+                            <React.Fragment key={run.runId}>
+                              <th className="px-3 py-2">Validation</th>
+                              <th className="px-3 py-2">Final 2025</th>
+                            </React.Fragment>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {METRICS.map((item) => (
+                          <tr key={item.key} className="border-t border-[#E8EFE0]">
+                            <td className="px-3 py-2 font-semibold text-[#164A32]">{item.label}</td>
+                            {displayRuns.map((run) => (
+                              <React.Fragment key={run.runId}>
+                                <td className="px-3 py-2 font-mono">
+                                  {formatMetric(run.temporalValidationMetrics, item.key, item.percent)}
+                                </td>
+                                <td className="px-3 py-2 font-mono">
+                                  {formatMetric(run.finalTestMetrics, item.key, item.percent)}
+                                </td>
+                              </React.Fragment>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-[11px] text-[#5F7061]">
+                    Metrik ditampilkan apa adanya dari backend; tidak ada pemilihan model pemenang otomatis.
+                  </p>
+                </div>
+              </>
+            )}
+          </section>
         </div>
       )}
     </div>

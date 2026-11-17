@@ -9,7 +9,9 @@ import {
   Info, 
   LogOut, 
   Home,
-  UploadCloud
+  Cpu,
+  UploadCloud,
+  Layers,
 } from 'lucide-react';
 
 interface AppSidebarProps {
@@ -37,7 +39,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     navigate('/');
   };
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'Administrator' || user?.email === 'admin@sipadi.id';
+  const isAdmin = user?.role === 'admin';
 
   const navItems: NavItem[] = [
     {
@@ -47,10 +49,22 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       desc: 'Agroklimat & Tren',
     },
     {
+      label: 'Prediksi Model',
+      path: '/dashboard/prediction-model',
+      icon: Cpu,
+      desc: 'Prediksi produktivitas',
+    },
+    {
       label: 'Analysis (XAI)',
       path: '/dashboard/analysis',
       icon: Network,
       desc: 'SHAP & Efek ALE',
+    },
+    {
+      label: 'Perbandingan Model',
+      path: '/dashboard/model-comparison',
+      icon: Layers,
+      desc: 'Baseline & Tuned',
     },
     {
       label: 'Insight & Peta',

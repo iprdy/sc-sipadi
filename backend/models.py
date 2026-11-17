@@ -1,7 +1,19 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
+
 from backend.database import Base
 
 
@@ -22,31 +34,94 @@ class TrainingRun(Base):
     id = Column(String(64), primary_key=True)
     filename = Column(String(255), nullable=False)
     created_at = Column(String(50), nullable=False)
+
+    # Jumlah baris master dan baris supervised yang benar-benar digunakan.
     rows_count = Column(Integer, nullable=False)
-    features = Column(Text, nullable=False)  # JSON-encoded array of feature names
+    supervised_rows = Column(Integer, nullable=True)
+
+    # JSON string agar tetap kompatibel dengan pola serialisasi API saat ini.
+    features = Column(Text, nullable=False)
     target_column = Column(String(100), nullable=False)
-    best_model = Column(String(50), nullable=False)
-    metrics = Column(Text, nullable=False)   # JSON-encoded dict of model metrics
-    shap_data = Column(Text, nullable=False) # JSON-encoded SHAP attributions
-    ale_data = Column(Text, nullable=False)  # JSON-encoded ALE curves
+    best_model = Column(String(120), nullable=False)
+
+    # Konfigurasi dan hasil evaluasi untuk eksperimen Model B.
+    model_params = Column(Text, nullable=True)
+    validation_scheme = Column(String(200), nullable=True)
+    temporal_validation_metrics = Column(Text, nullable=True)
+    final_test_metrics = Column(Text, nullable=True)
+
+    # Dipertahankan untuk kompatibilitas dengan endpoint lama.
+    metrics = Column(Text, nullable=False)
+    shap_data = Column(Text, nullable=False)
+    ale_data = Column(Text, nullable=False)
+
+    # Hindari nama atribut "metadata" karena Base.metadata milik SQLAlchemy.
+    metadata_json = Column(Text, nullable=True)
+
     model_path = Column(String(500), nullable=False)
     uploaded_by = Column(String(120), nullable=True)
 
-    records = relationship("DatasetRecord", back_populates="run", cascade="all, delete-orphan")
+    records = relationship(
+        "DatasetRecord",
+        back_populates="run",
+        cascade="all, delete-orphan",
+    )
 
 
 class DatasetRecord(Base):
+    """
+    Menyimpan observasi Master Dataset yang sudah divalidasi.
+
+    Fitur lag, rolling, sin_month, dan cos_month tidak disimpan di tabel ini.
+    Fitur tersebut dibentuk oleh ml_engine.py berdasarkan urutan waktu
+    per kabupaten/kota setiap kali proses modeling dijalankan.
+    """
+
     __tablename__ = "dataset_records"
 
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "kabupaten",
+            "tahun",
+            "bulan",
+            name="uq_dataset_record_run_period",
+        ),
+        Index(
+            "ix_dataset_record_region_year",
+            "kabupaten",
+            "tahun",
+        ),
+    )
+
     id = Column(Integer, primary_key=True, autoincrement=True)
-    run_id = Column(String(64), ForeignKey("training_runs.id", ondelete="CASCADE"), index=True, nullable=False)
+    run_id = Column(
+        String(64),
+        ForeignKey("training_runs.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+
+    # Key observasi bulanan.
+    # Float dipertahankan agar kompatibel dengan tipe kolom database lama;
+    # validator tetap memastikan nilainya bilangan bulat 1 sampai 12.
     kabupaten = Column(String(100), index=True, nullable=False)
     tahun = Column(Integer, index=True, nullable=False)
-    bulan = Column(Float, nullable=True)
+    bulan = Column(Float, nullable=False)
+
+    # Kolom Master Dataset.
+    # Luas panen dan produksi boleh NULL bila sumber data tidak menyediakannya.
+    luas_panen_ha = Column(Float, nullable=True)
+    produksi_ton = Column(Float, nullable=True)
+    produktivitas = Column(Float, nullable=True)
+
+    # Variabel lingkungan wajib tersedia menurut validator.
     ndvi = Column(Float, nullable=False)
     lst = Column(Float, nullable=False)
     rainfall = Column(Float, nullable=False)
-    produktivitas = Column(Float, nullable=False)
+
+    # Metadata kualitas/sumber LST.
+    status_lst = Column(String(100), nullable=True)
 
     run = relationship("TrainingRun", back_populates="records")
 
@@ -58,7 +133,12 @@ class InsightSummary(Base):
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    run_id = Column(String(64), ForeignKey("training_runs.id", ondelete="CASCADE"), index=True, nullable=False)
+    run_id = Column(
+        String(64),
+        ForeignKey("training_runs.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
     kabupaten = Column(String(100), index=True, nullable=False)
     tahun = Column(Integer, index=True, nullable=False)
 
@@ -77,4 +157,3 @@ class InsightSummary(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     run = relationship("TrainingRun")
-

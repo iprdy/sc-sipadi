@@ -168,24 +168,32 @@ Pada [`InsightPage.tsx`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Si
 
 ---
 
-## 6. Strategi Eksekusi & Ketahanan Sistem
+## 6. Cara Kerja RAG Kita & Strategi Ketahanan 2-Lapis (*Fallback*)
 
-1. **Lazy Caching (On-Demand):** Ringkasan AI hanya dibuat saat pasangan `(kabupaten, tahun)` pertama kali dibuka di halaman **Insight & Peta**, lalu langsung disimpan ke tabel `insight_summaries`.
-2. **Opsional Pre-Warming / Regenerate:** Admin dapat diberi parameter query opsional `?refresh=true` (dilindungi autentikasi admin) jika ingin me-regenerate narasi untuk suatu wilayah/tahun tanpa harus mengunggah ulang dataset.
-3. **Konfigurasi Environment ([`backend/.env.example`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/backend/.env.example)):**
-   - Tambahkan `GEMINI_API_KEY=` dan `GEMINI_MODEL=gemini-3.5-flash-lite`.
-   - Tambahkan `google-genai` ke [`backend/requirements.txt`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/backend/requirements.txt).
-   - Jika `GEMINI_API_KEY` kosong atau layanan eksternal tidak terjangkau, sistem otomatis menggunakan *deterministic fallback generator* berbasis data aktual tanpa menulis status fallback ke cache permanen.
+### 6.1 Langkah Eksekusi End-to-End ([`backend/rag_engine.py`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/backend/rag_engine.py))
+1. **Cache-First Check (`get_or_create_insight_synthesis`):** Saat user membuka halaman **Insight & Peta** (`GET /api/insight/data`), backend mengecek tabel `insight_summaries` berdasarkan `(run_id, kabupaten, tahun)`. Jika ditemukan (*Cache Hit*), hasilnya langsung dikembalikan instan tanpa memanggil Gemini API.
+2. **Retrieval Konteks Kuantitatif & XAI (`compute_local_xai_context`):** Jika *Cache Miss*, backend mengambil rata-rata aktual (`ton/ha`, `NDVI`, `LST`, `Rainfall`), peringkat provinsi, bulan tertinggi/terendah dari `DatasetRecord`, lalu menjalankan `shap.TreeExplainer` terhadap model terbaik untuk memperoleh prediksi lokal dan kontribusi SHAP tiap variabel.
+3. **Retrieval Pengetahuan Agronomi (`retrieve_agronomy_context`):** Backend mencocokkan kondisi terukur wilayah ke korpus [`backend/knowledge/agronomy_rules.json`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/backend/knowledge/agronomy_rules.json) (aturan ambang batas NDVI, suhu LST, curah hujan, serta profil geografis kabupaten bersangkutan).
+4. **Generation Terstruktur (`_synthesize_with_gemini`):** Konteks fakta + pengetahuan RAG digabungkan menjadi prompt terikat fakta (*data-grounded*) lalu dikirim ke **`gemini-3.5-flash-lite`** via `google-genai` dengan `temperature=0.25` dan `response_schema=InsightSynthesisSchema`.
+5. **Persist ke Database & Regenerate Admin:** Output JSON valid langsung disimpan ke tabel `insight_summaries` per `run_id`. Admin juga memiliki endpoint `POST /api/admin/insight/regenerate` untuk memaksa pembaruan narasi bila diperlukan.
+
+### 6.2 Mekanisme Cadangan (*Fallback*) 2 Lapis
+1. **Lapis 1 — Backend Hidup, tetapi `GEMINI_API_KEY` Kosong / Kuota Habis / Offline (`build_deterministic_fallback`):**
+   - Seluruh angka statistik, peringkat, catatan bulanan Jan–Des, dan nilai SHAP tetap **100% real dari database & model ML**.
+   - Kalimat pada ringkasan dan 4 pilar disusun secara deterministik oleh backend dari angka real + aturan `agronomy_rules.json`.
+   - Hasil fallback ini **tidak disimpan ke cache permanen** (`insight_summaries`), sehingga saat `GEMINI_API_KEY` diisi di [`backend/.env`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/backend/.env) dan backend dijalankan ulang, Gemini otomatis menghasilkan & meng-cache narasi pada kunjungan berikutnya.
+2. **Lapis 2 — Backend Mati Total (`src/services/apiService.ts`):**
+   - Apabila server FastAPI (port 8000) tidak menyala sehingga `fetch('/api/insight/data')` gagal, blok `catch` di [`src/services/apiService.ts`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/src/services/apiService.ts) otomatis memanggil `getMockInsightData` ([`src/mocks/data.ts`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/src/mocks/data.ts)) agar antarmuka tidak mengalami *blank screen* atau crash (namun angka database real & rincian bulanan peta hanya tersedia saat backend aktif).
 
 ---
 
-## 7. Rencana Aksi Implementasi (To-Do List)
+## 7. Status Implementasi (Selesai)
 
-- [ ] **Fase 1: Skema Database, Dependencies & Knowledge Base**
-  - Menambahkan tabel `InsightSummary` ke [`backend/models.py`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/backend/models.py), paket `google-genai` ke `requirements.txt`, serta konfigurasi `GEMINI_API_KEY` & `GEMINI_MODEL=gemini-3.5-flash-lite` di `.env`.
-  - Membuat modul `backend/rag_engine.py` beserta korpus aturan agronomi padi di `backend/knowledge/`.
-- [ ] **Fase 2: Pipeline Retrieval + Structured Gemini Synthesis**
-  - Menghubungkan `rag_engine.py` dengan query statistik wilayah, `shap.TreeExplainer`, dan data ALE dari [`backend/main.py`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/backend/main.py).
-  - Mengimplementasikan logika *cache-first* (`SELECT` $\rightarrow$ jika kosong panggil `gemini-3.5-flash-lite` dengan `response_schema` + `INSERT`) dan mekanisme *fallback* saat offline.
-- [ ] **Fase 3: Integrasi Frontend `InsightPage`**
-  - Memperbarui [`src/types/index.ts`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/src/types/index.ts), [`src/services/apiService.ts`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/src/services/apiService.ts), dan 4 pilar card pada [`InsightPage.tsx`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/src/pages/InsightPage.tsx) agar menampilkan hasil sintesis AI secara dinamis.
+- [x] **Fase 1: Skema Database, Dependencies & Knowledge Base**
+  - Menambahkan tabel `InsightSummary` ke [`backend/models.py`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/backend/models.py), paket `google-genai` ke [`backend/requirements.txt`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/backend/requirements.txt), serta konfigurasi `GEMINI_API_KEY` & `GEMINI_MODEL=gemini-3.5-flash-lite` di [`backend/.env.example`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/backend/.env.example) dan [`backend/.env`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/backend/.env).
+  - Membuat modul [`backend/rag_engine.py`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/backend/rag_engine.py) beserta korpus aturan agronomi padi di [`backend/knowledge/agronomy_rules.json`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/backend/knowledge/agronomy_rules.json).
+- [x] **Fase 2: Pipeline Retrieval + Structured Gemini Synthesis**
+  - Menghubungkan `rag_engine.py` dengan query statistik wilayah, `shap.TreeExplainer`, dan endpoint `GET /api/insight/data` serta `POST /api/admin/insight/regenerate` di [`backend/main.py`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/backend/main.py).
+  - Mengimplementasikan logika *cache-first* (`SELECT` $\rightarrow$ jika kosong panggil `gemini-3.5-flash-lite` dengan `response_schema` + `INSERT`) dan fallback deterministik saat API key kosong/offline.
+- [x] **Fase 3: Integrasi Frontend `InsightPage`**
+  - Memperbarui [`src/types/index.ts`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/src/types/index.ts), [`src/services/apiService.ts`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/src/services/apiService.ts), dan 4 pilar card pada [`InsightPage.tsx`](file:///c:/Users/iputu/Documents/Kuliah/Semester%205/Sistem%20Cerdas%20(B)/web%20project/src/pages/InsightPage.tsx) untuk menampilkan hasil sintesis terstruktur dari backend secara dinamis.

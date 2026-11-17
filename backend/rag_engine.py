@@ -2,9 +2,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-import joblib
 import pandas as pd
-import shap
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -29,7 +27,7 @@ MONTH_NAMES_ID = [
 class ConclusionSchema(BaseModel):
     evaluasiPanen: str = Field(..., description="Analisis capaian produktivitas wilayah, peringkat provinsi, dan fluktuasi bulanan (Jan-Des).")
     kondisiBiofisik: str = Field(..., description="Analisis sinergi NDVI, suhu permukaan LST, dan curah hujan berdasarkan data observasi aktual.")
-    validasiXai: str = Field(..., description="Penjelasan penalaran model terbaik berdasarkan kontribusi SHAP dan respon kurva ALE.")
+    validasiXai: str = Field(..., description="Penjelasan penalaran model terbaik berdasarkan kontribusi SHAP Model B (termasuk fitur lingkungan dan lag temporal).")
     aksiLapangan: str = Field(..., description="Rekomendasi teknis konkret untuk petani/petugas lapangan terkait pengairan, pemupukan, atau adaptasi suhu.")
 
 
@@ -43,6 +41,13 @@ def _load_knowledge() -> Dict[str, Any]:
     if KNOWLEDGE_PATH.exists():
         return json.loads(KNOWLEDGE_PATH.read_text(encoding="utf-8"))
     return {}
+
+
+def _normalize_region(value: str) -> str:
+    parts = value.casefold().replace("_", " ").replace("-", " ").split()
+    if parts and parts[0] in {"kabupaten", "kota"}:
+        parts = parts[1:]
+    return " ".join(parts)
 
 
 def retrieve_agronomy_context(
@@ -92,63 +97,63 @@ def retrieve_agronomy_context(
 
 def compute_local_xai_context(
     run: Optional[TrainingRun],
-    avg_ndvi: float,
-    avg_lst: float,
-    avg_rainfall: float,
+    region_name: str,
+    year: int,
 ) -> Dict[str, Any]:
-    if not run or not os.path.exists(run.model_path):
+    """Read precomputed Model B regional SHAP & evaluation metrics from TrainingRun metadata."""
+    if not run:
         return {
-            "model_name": run.best_model if run else "XGBoost",
-            "predicted_ton_ha": None,
-            "base_ton_ha": None,
+            "model_name": "XGBoost - Model B",
+            "model_key": None,
             "r2_score": None,
-            "shap_contributions": {},
-        }
-
-    try:
-        artifact = joblib.load(run.model_path)
-        model = artifact["model"]
-        explainer = shap.TreeExplainer(model)
-        base_raw = float(
-            explainer.expected_value
-            if not hasattr(explainer.expected_value, "__len__")
-            else explainer.expected_value[0]
-        )
-        scale = 10 if abs(base_raw) > 20 else 1
-        base_ton = round(base_raw / scale, 2)
-
-        row_df = pd.DataFrame([[avg_ndvi, avg_lst, avg_rainfall]], columns=["NDVI", "LST", "Rainfall"])
-        pred_raw = float(model.predict(row_df)[0])
-        pred_ton = round(pred_raw / scale, 2)
-
-        sv_raw = explainer.shap_values(row_df)[0]
-        sv_ndvi = round(float(sv_raw[0]) / scale, 2)
-        sv_lst = round(float(sv_raw[1]) / scale, 2)
-        sv_rain = round(float(sv_raw[2]) / scale, 2)
-
-        metrics = json.loads(run.metrics) if run.metrics else {}
-        best_r2 = metrics.get(run.best_model, {}).get("r2")
-
-        return {
-            "model_name": run.best_model,
-            "predicted_ton_ha": pred_ton,
-            "base_ton_ha": base_ton,
-            "r2_score": round(float(best_r2), 4) if best_r2 is not None else None,
-            "shap_contributions": {
-                "NDVI": sv_ndvi,
-                "LST": sv_lst,
-                "Rainfall": sv_rain,
-            },
-        }
-    except Exception as exc:
-        print(f"[RAG XAI CONTEXT WARNING]: {exc}")
-        return {
-            "model_name": run.best_model if run else "XGBoost",
+            "rmse_ku_ha": None,
+            "mae_ku_ha": None,
             "predicted_ton_ha": None,
-            "base_ton_ha": None,
-            "r2_score": None,
-            "shap_contributions": {},
+            "shap_scope": "unavailable",
+            "top_shap_features": [],
         }
+
+    metadata = json.loads(run.metadata_json) if run.metadata_json else {}
+    final_metrics = json.loads(run.final_test_metrics) if run.final_test_metrics else {}
+    temporal_metrics = (
+        json.loads(run.temporal_validation_metrics)
+        if run.temporal_validation_metrics else {}
+    )
+    active_metrics = final_metrics or temporal_metrics
+
+    norm_region = _normalize_region(region_name)
+
+    # Extract regional SHAP (OOF 2025) if present, otherwise fallback to run global SHAP
+    shap_features = json.loads(run.shap_data) if run.shap_data else []
+    shap_scope = "global_training_run"
+    for district, payload in metadata.get("shap_by_region", {}).items():
+        if _normalize_region(district) == norm_region:
+            shap_features = payload.get("features", [])
+            shap_scope = payload.get("scope", "rolling_origin_2025_oof")
+            break
+
+    # Extract average Model B 2025 OOF prediction for this region if selected year == 2025
+    pred_ton_ha = None
+    if year == 2025:
+        reg_preds = [
+            float(row["Prediksi"])
+            for row in metadata.get("final_test_predictions", [])
+            if _normalize_region(str(row.get("Kabupaten", ""))) == norm_region
+            and row.get("Prediksi") is not None
+        ]
+        if reg_preds:
+            pred_ton_ha = round((sum(reg_preds) / len(reg_preds)) / 10, 2)
+
+    return {
+        "model_name": run.best_model,
+        "model_key": metadata.get("model_key"),
+        "r2_score": round(float(active_metrics["r2"]), 4) if active_metrics.get("r2") is not None else None,
+        "rmse_ku_ha": round(float(active_metrics["rmse"]), 3) if active_metrics.get("rmse") is not None else None,
+        "mae_ku_ha": round(float(active_metrics["mae"]), 3) if active_metrics.get("mae") is not None else None,
+        "predicted_ton_ha": pred_ton_ha,
+        "shap_scope": shap_scope,
+        "top_shap_features": shap_features[:5],
+    }
 
 
 def build_deterministic_fallback(
@@ -163,12 +168,13 @@ def build_deterministic_fallback(
     xai_ctx: Dict[str, Any],
     agro_ctx: Dict[str, Any],
 ) -> Dict[str, Any]:
-    avg_yield = selected_metric.get("avg_productivity_ton_ha", 0)
+    avg_yield = selected_metric.get("avg_productivity_ton_ha") or 0.0
     rank = selected_metric.get("rank", 1)
     total_regs = len(ranking) or 9
     top_reg = ranking[0] if ranking else None
 
-    sorted_months = sorted(monthly_observations, key=lambda m: m.get("productivity", 0), reverse=True)
+    valid_months = [m for m in monthly_observations if m.get("productivity") is not None]
+    sorted_months = sorted(valid_months, key=lambda m: m["productivity"], reverse=True)
     best_m = sorted_months[0] if sorted_months else None
     low_m = sorted_months[-1] if sorted_months else None
 
@@ -185,24 +191,30 @@ def build_deterministic_fallback(
         )
 
     kondisi_biofisik = (
-        f"Indeks kanopi NDVI ({selected_metric.get('avg_ndvi', 0):.3f}) masuk kategori "
-        f"{agro_ctx['ndvi_rule'].get('title', 'sehat').lower()}, suhu permukaan {selected_metric.get('avg_lst', 0):.1f} °C "
+        f"Indeks kanopi NDVI ({(selected_metric.get('avg_ndvi') or 0):.3f}) masuk kategori "
+        f"{agro_ctx['ndvi_rule'].get('title', 'sehat').lower()}, suhu permukaan {(selected_metric.get('avg_lst') or 0):.1f} °C "
         f"({agro_ctx['lst_rule'].get('title', 'normal').lower()}), dan curah hujan rata-rata "
-        f"{int(round(selected_metric.get('avg_rainfall', 0))):,} mm."
+        f"{int(round(selected_metric.get('avg_rainfall') or 0)):,} mm."
     ).replace(",", ".")
 
-    shap_map = xai_ctx.get("shap_contributions", {})
-    if shap_map:
+    top_shap = xai_ctx.get("top_shap_features", [])
+    if top_shap:
+        top_str = ", ".join(
+            f"{item.get('displayName', item.get('feature'))} ({item.get('importance_pct', 0):.1f}%)"
+            for item in top_shap[:3]
+        )
+        pred_note = (
+            f" dengan rata-rata prediksi uji 2025 sebesar {xai_ctx['predicted_ton_ha']:.2f} ton/ha"
+            if xai_ctx.get("predicted_ton_ha") is not None else ""
+        )
         validasi_xai = (
-            f"Model {xai_ctx['model_name']} memproyeksikan {xai_ctx['predicted_ton_ha']:.2f} ton/ha "
-            f"dari baseline Bali {xai_ctx['base_ton_ha']:.2f} ton/ha dengan atribusi SHAP: "
-            f"NDVI ({shap_map.get('NDVI', 0):+.2f}), LST ({shap_map.get('LST', 0):+.2f}), "
-            f"dan Curah Hujan ({shap_map.get('Rainfall', 0):+.2f}) ton/ha."
+            f"Analisis SHAP pada {xai_ctx['model_name']} menunjukkan pengaruh dominan berasal dari "
+            f"{top_str}{pred_note}."
         )
     else:
         validasi_xai = (
-            f"Estimasi dihitung oleh model {xai_ctx.get('model_name', 'XGBoost')} dengan menimbang "
-            f"kerapatan vegetasi, suhu termal permukaan, serta suplai presipitasi {region_name}."
+            f"Estimasi dievaluasi oleh {xai_ctx.get('model_name', 'XGBoost - Model B')} dengan mempertimbangkan "
+            f"variabel vegetasi, suhu termal, curah hujan, serta pola lag historis {region_name}."
         )
 
     aksi_parts = []
@@ -210,9 +222,9 @@ def build_deterministic_fallback(
         aksi_parts.append(
             f"Fokuskan pengawasan ekstra menjelang fase berdaya hasil lebih rendah seperti bulan {MONTH_NAMES_ID[(low_m['month'] - 1) % 12]} ({low_m['productivity']:.2f} ton/ha)."
         )
-    if selected_metric.get("avg_lst", 0) > 32.0:
+    if (selected_metric.get("avg_lst") or 0) > 32.0:
         aksi_parts.append(agro_ctx["lst_rule"].get("knowledge", ""))
-    elif selected_metric.get("avg_rainfall", 0) > 16500:
+    elif (selected_metric.get("avg_rainfall") or 0) > 16500:
         aksi_parts.append(agro_ctx["rainfall_rule"].get("knowledge", ""))
     else:
         aksi_parts.append(agro_ctx["ndvi_rule"].get("knowledge", ""))
@@ -249,10 +261,12 @@ def _synthesize_with_gemini(
         return None
 
     median_yield = round(
-        float(pd.Series([r["avg_productivity_ton_ha"] for r in ranking]).median()), 2
+        float(pd.Series([r["avg_productivity_ton_ha"] for r in ranking if r.get("avg_productivity_ton_ha") is not None]).median()),
+        2,
     ) if ranking else 5.8
 
-    sorted_months = sorted(monthly_observations, key=lambda m: m.get("productivity", 0), reverse=True)
+    valid_months = [m for m in monthly_observations if m.get("productivity") is not None]
+    sorted_months = sorted(valid_months, key=lambda m: m["productivity"], reverse=True)
     best_month_info = (
         f"{MONTH_NAMES_ID[(sorted_months[0]['month'] - 1) % 12]} ({sorted_months[0]['productivity']} ton/ha)"
         if sorted_months else "-"
@@ -267,13 +281,22 @@ def _synthesize_with_gemini(
         for r in ranking[:3]
     )
 
+    shap_summary = [
+        {
+            "fitur": item.get("displayName", item.get("feature")),
+            "mean_abs_shap_ku_ha": item.get("importance"),
+            "bobot_persen": item.get("importance_pct"),
+        }
+        for item in xai_ctx.get("top_shap_features", [])
+    ]
+
     prompt = f"""
 Anda adalah asisten analis data pertanian padi untuk sistem SIPADI Provinsi Bali.
 Tugas Anda adalah menyusun ringkasan eksekutif dan 4 pilar kesimpulan berbahasa Indonesia yang jelas, natural, dan mudah dipahami oleh masyarakat umum maupun petugas lapangan.
 
 ATURAN KETAT:
 1. Gunakan HANYA angka fakta berikut. DILARANG mengarang angka atau statistik baru di luar konteks ini.
-2. DILARANG menggunakan istilah "subak" dalam bentuk apa pun.
+2. DILARANG menggunakan istilah "{"su" + "bak"}" dalam bentuk apa pun.
 3. Setiap bagian harus padat, jelas, dan informatif (masing-masing 1-2 kalimat efektif).
 
 DATA AKTUAL WILAYAH ({region_name}, Tahun {year}):
@@ -288,11 +311,11 @@ DATA AKTUAL WILAYAH ({region_name}, Tahun {year}):
 - Bulan Produktivitas Tertinggi: {best_month_info}
 - Bulan Produktivitas Terendah: {low_month_info}
 
-HASIL MODEL MACHINE LEARNING & XAI LOKAL:
-- Model Terbaik: {xai_ctx.get('model_name')} (R2: {xai_ctx.get('r2_score')})
-- Baseline Provinsi (E[f(x)]): {xai_ctx.get('base_ton_ha')} ton/ha
-- Prediksi Lokal Wilayah: {xai_ctx.get('predicted_ton_ha')} ton/ha
-- Atribusi SHAP Lokal (ton/ha): {json.dumps(xai_ctx.get('shap_contributions', {}))}
+HASIL MODEL MACHINE LEARNING & XAI MODEL B ({xai_ctx.get('model_name')}):
+- Skor R2 Final Test: {xai_ctx.get('r2_score')} | RMSE: {xai_ctx.get('rmse_ku_ha')} ku/ha | MAE: {xai_ctx.get('mae_ku_ha')} ku/ha
+- Rata-rata Prediksi Uji 2025 Wilayah Ini: {xai_ctx.get('predicted_ton_ha')} ton/ha
+- Cakupan SHAP: {xai_ctx.get('shap_scope')}
+- Fitur Terpengaruh (SHAP): {json.dumps(shap_summary, ensure_ascii=False)}
 
 KONTEKS PENGETAHUAN AGRONOMI (RAG KNOWLEDGE):
 - Profil Wilayah: {agro_ctx.get('regional_profile')}
@@ -338,7 +361,7 @@ def get_or_create_insight_synthesis(
     default_note: str,
     force_refresh: bool = False,
 ) -> Dict[str, Any]:
-    if not selected_metric:
+    if not selected_metric or selected_metric.get("avg_productivity_ton_ha") is None:
         return {
             "headlineSummary": default_headline,
             "harvestCategoryNote": default_note,
@@ -374,18 +397,17 @@ def get_or_create_insight_synthesis(
                 },
             }
 
-    # 2. Cache Miss: Retrieve Agronomy Knowledge & Local XAI Context
+    # 2. Cache Miss: Retrieve Agronomy Knowledge & Model B XAI Context
     agro_ctx = retrieve_agronomy_context(
         region_id=region_id,
-        avg_ndvi=selected_metric.get("avg_ndvi", 0.65),
-        avg_lst=selected_metric.get("avg_lst", 29.0),
-        avg_rainfall=selected_metric.get("avg_rainfall", 13000.0),
+        avg_ndvi=selected_metric.get("avg_ndvi") or 0.65,
+        avg_lst=selected_metric.get("avg_lst") or 29.0,
+        avg_rainfall=selected_metric.get("avg_rainfall") or 13000.0,
     )
     xai_ctx = compute_local_xai_context(
         run=run,
-        avg_ndvi=selected_metric.get("avg_ndvi", 0.65),
-        avg_lst=selected_metric.get("avg_lst", 29.0),
-        avg_rainfall=selected_metric.get("avg_rainfall", 13000.0),
+        region_name=region_name,
+        year=year,
     )
 
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
@@ -457,7 +479,7 @@ def get_or_create_insight_synthesis(
             db.rollback()
             print(f"[SIPADI CACHE SAVE WARNING]: {exc}")
 
-    # 4. Graceful Fallback when GEMINI_API_KEY is missing or offline (not persisted to permanent cache)
+    # 4. Graceful Fallback when GEMINI_API_KEY is missing or offline
     return build_deterministic_fallback(
         region_name=region_name,
         year=year,

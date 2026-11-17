@@ -12,8 +12,7 @@ import {
 
 interface TrendItem {
   year: number;
-  realisasi?: number;
-  estimasi: number;
+  realisasi: number | null;
 }
 
 interface ProductivityTrendChartProps {
@@ -55,22 +54,15 @@ export const ProductivityTrendChart: React.FC<ProductivityTrendChartProps> = ({ 
                 return (
                   <div className="bg-[#FFFDF7] p-3 rounded-xl border border-[#D8E3CC] shadow-md text-xs font-sans">
                     <p className="font-bold text-[#164A32] text-sm mb-1.5">Tahun {label}</p>
-                    {item.realisasi !== undefined && (
+                    {item.realisasi !== null && (
                       <div className="flex items-center justify-between gap-4 py-0.5">
                         <span className="text-[#5F7061] flex items-center gap-1.5">
                           <span className="w-2 h-2 rounded-full bg-[#164A32]" />
-                          Realisasi Aktual:
+                          Produktivitas aktual:
                         </span>
                         <strong className="text-[#164A32]">{item.realisasi} ton/ha</strong>
                       </div>
                     )}
-                    <div className="flex items-center justify-between gap-4 py-0.5">
-                      <span className="text-[#287A4A] flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-[#55A85F]" />
-                        Estimasi Model SIPADI:
-                      </span>
-                      <strong className="text-[#287A4A]">{item.estimasi} ton/ha</strong>
-                    </div>
                   </div>
                 );
               }
@@ -81,30 +73,21 @@ export const ProductivityTrendChart: React.FC<ProductivityTrendChartProps> = ({ 
             verticalAlign="top"
             align="right"
             wrapperStyle={{ paddingBottom: '12px', fontSize: '12px' }}
-            formatter={(value) => (
+            formatter={() => (
               <span className="text-xs font-semibold text-[#164A32]">
-                {value === 'realisasi' ? 'Realisasi BPS' : 'Estimasi Model XGBoost'}
+                Produktivitas aktual (training run)
               </span>
             )}
           />
           <Area
             type="monotone"
-            dataKey="estimasi"
+            dataKey="realisasi"
             stroke="#287A4A"
             strokeWidth={2.5}
             fillOpacity={1}
             fill="url(#trendGradient)"
             dot={{ r: 4, fill: '#287A4A', stroke: '#FFFDF7', strokeWidth: 2 }}
             activeDot={{ r: 6, fill: '#164A32' }}
-          />
-          <Area
-            type="monotone"
-            dataKey="realisasi"
-            stroke="#164A32"
-            strokeWidth={2}
-            strokeDasharray="4 4"
-            fillOpacity={0}
-            dot={{ r: 3, fill: '#164A32' }}
           />
         </AreaChart>
       </ResponsiveContainer>

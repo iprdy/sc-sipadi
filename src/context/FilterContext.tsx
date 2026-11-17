@@ -29,11 +29,9 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       })
       .then((data) => {
         if (data.regions && data.regions.length > 0) {
-          setRegions(data.regions.map((r: { id: string; name: string; fields?: number; areaHa?: number }) => ({
+          setRegions(data.regions.map((r: { id: string; name: string }) => ({
             id: r.id as RegionId,
             name: r.name,
-            totalFields: r.fields || 100,
-            totalAreaHa: r.areaHa || 10000,
           })));
         }
         if (data.years && data.years.length > 0) {

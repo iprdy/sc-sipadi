@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useFilter } from '../../context/FilterContext';
 import { useAuth } from '../../context/AuthContext';
+import { useModelRun } from '../../context/ModelRunContext';
 import { RegionId } from '../../types';
 import { 
   Download, 
@@ -16,6 +17,14 @@ interface AppHeaderProps {
 export const AppHeader: React.FC<AppHeaderProps> = ({ isSidebarExpanded }) => {
   const { selectedRegion, setSelectedRegion, selectedYear, setSelectedYear, regions, years } = useFilter();
   const { user } = useAuth();
+  const {
+    selectedRunId,
+    selectedModelKey,
+    availableRuns,
+    loading: runsLoading,
+    error: runsError,
+    selectRun,
+  } = useModelRun();
   const [exportNotice, setExportNotice] = useState<string | null>(null);
 
   const handleExport = () => {
@@ -59,6 +68,36 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ isSidebarExpanded }) => {
               {years.map((y) => (
                 <option key={y} value={y}>
                   {y}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div
+            className="relative flex items-center gap-1.5 bg-[#FFFDF7] border border-[#E3DCBA] rounded-xl px-3 py-1.5 h-9 shadow-xs hover:border-[#287A4A] transition-colors"
+            title={runsError || `Batch ${availableRuns[0]?.uploadBatchId || 'tidak tersedia'}`}
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${
+                selectedModelKey === 'xgboost_tuned' ? 'bg-[#C58B2A]' : 'bg-[#287A4A]'
+              }`}
+            />
+            <span className="text-[11px] text-[#68766D] font-medium hidden sm:inline">Model:</span>
+            <select
+              aria-label="Pilih model training"
+              value={selectedRunId || ''}
+              onChange={(event) => selectRun(event.target.value)}
+              disabled={runsLoading || availableRuns.length === 0}
+              className="max-w-[120px] bg-transparent text-xs font-bold text-[#19382A] focus:outline-hidden cursor-pointer disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              <option value="" disabled>
+                {runsLoading ? 'Memuat run…' : 'Belum tersedia'}
+              </option>
+              {availableRuns.map((run) => (
+                <option key={run.runId} value={run.runId}>
+                  {run.modelKey === 'xgboost_baseline'
+                    ? 'XGBoost Baseline'
+                    : 'XGBoost Tuned'}
                 </option>
               ))}
             </select>

@@ -10,7 +10,11 @@ from backend.database import get_db
 
 security = HTTPBearer(auto_error=False)
 
-JWT_SECRET = os.getenv("JWT_SECRET", "sipadi_super_secret_jwt_key_2026_change_in_production")
+JWT_SECRET = os.getenv("JWT_SECRET", "").strip()
+if len(JWT_SECRET) < 32 or JWT_SECRET == "replace-with-a-long-random-secret":
+    raise RuntimeError(
+        "JWT_SECRET must be configured with a random value of at least 32 characters."
+    )
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
 

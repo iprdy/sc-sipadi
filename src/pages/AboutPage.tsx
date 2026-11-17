@@ -1,13 +1,10 @@
 import React from 'react';
 import { 
   Sprout, 
-  Satellite, 
   Cpu, 
   Network, 
-  Sparkles,
   Layers,
   Database,
-  CheckCircle2
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -26,8 +23,7 @@ export const AboutPage: React.FC = () => {
           </span>
         </div>
         <p className="text-xs sm:text-sm text-[#5F7061] max-w-3xl">
-          Informasi metodologi ilmiah, arsitektur pemrosesan data penginderaan jauh (*remote sensing*), 
-          model machine learning XGBoost, dan kerangka interpretasi *Explainable AI* (SHAP &amp; ALE).
+          Informasi Master Dataset, fitur temporal Model B yang dapat dikonfigurasi, serta analisis SHAP dan ALE dari training run tersimpan.
         </p>
       </section>
 
@@ -46,14 +42,12 @@ export const AboutPage: React.FC = () => {
           </div>
 
           <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight leading-snug">
-            Transformasi Observasi Satelit Menjadi Keputusan Pertanian yang Terjelaskan
+            Pengolahan Data Produktivitas Padi yang Dapat Ditinjau
           </h2>
 
           <p className="text-xs sm:text-sm text-[#A2C79A] leading-relaxed">
-            Perubahan iklim global dan pergeseran pola hujan musiman menuntut metode estimasi hasil panen
-            yang lebih cepat, objektif, dan dapat dipertanggungjawabkan secara agronomis. SIPADI menggabungkan
-            citra multispektral orbit bumi dengan algoritma gradient boosting dan penjelasan XAI untuk
-            memastikan setiap estimasi panen dapat diverifikasi oleh penyuluh lapangan dan peneliti.
+            SI-PADI memvalidasi Master Dataset, membentuk fitur temporal tanpa mengimputasi target produktivitas
+            yang kosong, serta menyimpan Pipeline, konfigurasi, dan hasil evaluasi pada setiap training run.
           </p>
         </div>
       </section>
@@ -62,12 +56,11 @@ export const AboutPage: React.FC = () => {
       <section className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div className="p-6 rounded-2xl bg-[#FFFDF7] border border-[#D8E3CC] shadow-xs flex flex-col gap-3">
           <div className="w-10 h-10 rounded-xl bg-[#EDF4E5] border border-[#C8DDAF] flex items-center justify-center text-[#287A4A]">
-            <Satellite className="w-5 h-5" />
+            <Database className="w-5 h-5" />
           </div>
-          <h3 className="text-base font-extrabold text-[#164A32]">Penginderaan Jauh (Remote Sensing)</h3>
+          <h3 className="text-base font-extrabold text-[#164A32]">Master Dataset</h3>
           <p className="text-xs text-[#5F7061] leading-relaxed">
-            Memanfaatkan citra Sentinel-2 MSI (resolusi 10 meter) untuk ekstraksi indeks kanopi hijau NDVI,
-            data kinetik termal Landsat/MODIS untuk Suhu Permukaan Tanah (LST), dan presipitasi curah hujan CHIRPS v2.0.
+            Memuat Kabupaten, Tahun, Bulan, NDVI, LST, Rainfall, Produktivitas, dan kolom pendukung. Target kosong dipertahankan sebagai NULL.
           </p>
         </div>
 
@@ -75,10 +68,9 @@ export const AboutPage: React.FC = () => {
           <div className="w-10 h-10 rounded-xl bg-[#EDF4E5] border border-[#C8DDAF] flex items-center justify-center text-[#287A4A]">
             <Cpu className="w-5 h-5" />
           </div>
-          <h3 className="text-base font-extrabold text-[#164A32]">Model Prediktif XGBoost</h3>
+          <h3 className="text-base font-extrabold text-[#164A32]">Model B yang Dapat Dikonfigurasi</h3>
           <p className="text-xs text-[#5F7061] leading-relaxed">
-            Algoritma Extreme Gradient Boosting dipilih karena ketangguhannya dalam menangani non-linearitas
-            faktor iklim, interaksi multivariat, dan ketahanan terhadap overfitting pada data tabular geospasial.
+            Algoritma dan parameternya dipilih melalui model_config.py. Fitur training dan inferensi memakai Pipeline serta daftar fitur yang sama.
           </p>
         </div>
 
@@ -88,8 +80,7 @@ export const AboutPage: React.FC = () => {
           </div>
           <h3 className="text-base font-extrabold text-[#164A32]">Explainable AI (SHAP &amp; ALE)</h3>
           <p className="text-xs text-[#5F7061] leading-relaxed">
-            Membongkar kotak hitam model machine learning. Menghitung kontribusi marjinal aditif per variabel
-            menggunakan SHAP TreeExplainer serta kurva respon terisolasi ALE tanpa bias korelasi antar-fitur.
+            SHAP merangkum kontribusi fitur global dan ALE menampilkan efek fitur pada data training run. Keduanya bukan atribusi petak, klaim kausal, atau rekomendasi agronomis.
           </p>
         </div>
       </section>
@@ -106,26 +97,26 @@ export const AboutPage: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-4 rounded-xl bg-white border border-[#D8E3CC] flex flex-col gap-1.5">
             <span className="text-[11px] font-bold text-[#287A4A]">Tahap 1 • Observasi</span>
-            <strong className="text-xs text-[#164A32]">Akuisisi Citra Satelit</strong>
-            <p className="text-[11px] text-[#5F7061]">Pengunduhan otomatis spektral Sentinel-2 dan data presipitasi curah hujan.</p>
+            <strong className="text-xs text-[#164A32]">Validasi Master Dataset</strong>
+            <p className="text-[11px] text-[#5F7061]">Memeriksa kolom dan kualitas observasi sebelum training.</p>
           </div>
 
           <div className="p-4 rounded-xl bg-white border border-[#D8E3CC] flex flex-col gap-1.5">
             <span className="text-[11px] font-bold text-[#287A4A]">Tahap 2 • Harmonisasi</span>
-            <strong className="text-xs text-[#164A32]">Penyelarasan Spasial</strong>
-            <p className="text-[11px] text-[#5F7061]">Ekstraksi batas petak sawah, elevasi kontur DEM, dan kalkulasi LST permukaan.</p>
+            <strong className="text-xs text-[#164A32]">Fitur Temporal</strong>
+            <p className="text-[11px] text-[#5F7061]">Membentuk lag-1, rolling-3, dan fitur siklik bulan dari observasi sebelumnya.</p>
           </div>
 
           <div className="p-4 rounded-xl bg-white border border-[#D8E3CC] flex flex-col gap-1.5">
             <span className="text-[11px] font-bold text-[#287A4A]">Tahap 3 • Inferensi</span>
-            <strong className="text-xs text-[#164A32]">Prediksi XGBoost</strong>
-            <p className="text-[11px] text-[#5F7061]">Estimasi bobot panen padi (ton/ha) berbasis model pohon gradient boosting.</p>
+            <strong className="text-xs text-[#164A32]">Training dan Evaluasi</strong>
+            <p className="text-[11px] text-[#5F7061]">Melatih satu model aktif dan mencatat temporal validation serta final test.</p>
           </div>
 
           <div className="p-4 rounded-xl bg-white border border-[#D8E3CC] flex flex-col gap-1.5">
             <span className="text-[11px] font-bold text-[#287A4A]">Tahap 4 • Interpretasi</span>
             <strong className="text-xs text-[#164A32]">Transparansi XAI</strong>
-            <p className="text-[11px] text-[#5F7061]">Dekomposisi nilai SHAP dan visualisasi kurva ALE untuk rekomendasi operasional.</p>
+            <p className="text-[11px] text-[#5F7061]">Menyimpan analisis SHAP dan ALE aktual untuk training run.</p>
           </div>
         </div>
       </section>
@@ -139,7 +130,7 @@ export const AboutPage: React.FC = () => {
               Sistem Informasi Agroklimat &amp; Prediksi Produktivitas Padi
             </span>
             <span className="text-[#5F7061]">
-              Akses modul pemantauan geospasial real-time dan analisis Explainable AI untuk wilayah binaan.
+              Akses data observasi dan analisis Explainable AI dari training run yang tersedia.
             </span>
           </div>
         </div>

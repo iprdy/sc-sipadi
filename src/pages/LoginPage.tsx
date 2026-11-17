@@ -28,7 +28,11 @@ export const LoginPage: React.FC = () => {
 
     setIsLoading(true);
     try {
-      await login(email, password);
+      const authenticated = await login(email, password);
+      if (!authenticated) {
+        setErrorMessage('Email atau kata sandi tidak sesuai, atau backend tidak tersedia.');
+        return;
+      }
       navigate('/dashboard/monitoring');
     } catch {
       setErrorMessage('Terjadi kesalahan saat masuk. Silakan coba lagi.');
@@ -126,35 +130,6 @@ export const LoginPage: React.FC = () => {
             )}
           </button>
         </form>
-
-        {/* Quick Demo Role Selectors */}
-        <div className="pt-2 border-t border-[#E8EFE0] flex flex-col gap-2">
-          <span className="text-[11px] font-semibold text-[#5F7061] text-center">
-            Uji Coba Akses Akun Cepat:
-          </span>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setEmail('admin@sipadi.id');
-                setPassword('admin123');
-              }}
-              className="py-2 px-2.5 rounded-xl border border-[#C8DDAF] bg-[#F2F8ED] hover:bg-[#E3F0DA] text-[11px] font-bold text-[#164A32] text-center transition-all cursor-pointer"
-            >
-              👑 Admin (Upload Data)
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setEmail('user@sipadi.id');
-                setPassword('user123');
-              }}
-              className="py-2 px-2.5 rounded-xl border border-[#D8E3CC] bg-white hover:bg-[#FAF7F0] text-[11px] font-bold text-[#3E5547] text-center transition-all cursor-pointer"
-            >
-              🌾 Pengguna Biasa
-            </button>
-          </div>
-        </div>
 
         {/* Footer Link to Register */}
         <div className="pt-2 text-center text-xs text-[#5F7061]">

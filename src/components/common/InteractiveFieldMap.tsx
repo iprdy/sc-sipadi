@@ -31,8 +31,8 @@ const BALI_BOUNDS: L.LatLngBoundsExpression = [
   [-8.05, 115.72],
 ];
 
-const getYieldColor = (tonHa?: number) => {
-  if (tonHa === undefined) return '#55A85F';
+const getYieldColor = (tonHa?: number | null) => {
+  if (tonHa === undefined || tonHa === null) return '#55A85F';
   if (tonHa >= 6.2) return '#1B6B3A';
   if (tonHa >= 5.8) return '#287A4A';
   if (tonHa >= 5.2) return '#55A85F';
@@ -198,9 +198,9 @@ export const InteractiveFieldMap: React.FC<InteractiveFieldMapProps> = ({
                 <span style="background:#EDF4E5; color:#287A4A; font-weight:800; font-size:10px; padding:1px 6px; border-radius:99px;">#${metric.rank}</span>
               </div>
               <div style="font-size:11px; color:#334436; line-height:1.5;">
-                <div>Produktivitas: <strong style="color:#164A32;">${metric.avgProductivityTonHa.toFixed(2)} ton/ha</strong></div>
-                <div>NDVI Kanopi: <strong>${metric.avgNdvi.toFixed(3)}</strong> • LST: <strong>${metric.avgLst} °C</strong></div>
-                <div>Curah Hujan: <strong>${Math.round(metric.avgRainfall).toLocaleString('id-ID')} mm</strong></div>
+                <div>Produktivitas: <strong style="color:#164A32;">${metric.avgProductivityTonHa != null ? `${metric.avgProductivityTonHa.toFixed(2)} ton/ha` : '—'}</strong></div>
+                <div>NDVI Kanopi: <strong>${metric.avgNdvi != null ? metric.avgNdvi.toFixed(3) : '—'}</strong> • LST: <strong>${metric.avgLst != null ? `${metric.avgLst} °C` : '—'}</strong></div>
+                <div>Curah Hujan: <strong>${metric.avgRainfall != null ? `${Math.round(metric.avgRainfall).toLocaleString('id-ID')} mm` : '—'}</strong></div>
               </div>
             </div>
           `
@@ -261,7 +261,7 @@ export const InteractiveFieldMap: React.FC<InteractiveFieldMapProps> = ({
           ">
             <span>${shortName}</span>
             ${
-              metric
+              metric && metric.avgProductivityTonHa != null
                 ? `<span style="color: ${isSel ? '#CFEF8A' : '#287A4A'}; font-weight: 800;">${metric.avgProductivityTonHa.toFixed(2)}</span>`
                 : ''
             }
@@ -309,7 +309,7 @@ export const InteractiveFieldMap: React.FC<InteractiveFieldMapProps> = ({
     mapRef.current?.flyToBounds(BALI_BOUNDS, { padding: [16, 16], duration: 0.75 });
   };
 
-  const ndviPct = Math.min(100, Math.max(0, Math.round(activeMetric.avgNdvi * 100)));
+  const ndviPct = Math.min(100, Math.max(0, Math.round((activeMetric.avgNdvi ?? 0) * 100)));
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 bg-[#FFFDF7] p-5 sm:p-6 rounded-2xl border border-[#D8E3CC] shadow-xs">
@@ -423,7 +423,7 @@ export const InteractiveFieldMap: React.FC<InteractiveFieldMapProps> = ({
                     </span>
                     {getShortRegencyName(reg.name)}{' '}
                     <span className={isSelected ? 'text-[#CFEF8A] font-bold' : 'text-[#287A4A] font-bold'}>
-                      {reg.avgProductivityTonHa.toFixed(2)}
+                      {reg.avgProductivityTonHa != null ? reg.avgProductivityTonHa.toFixed(2) : '—'}
                     </span>
                   </button>
                 );
@@ -461,7 +461,7 @@ export const InteractiveFieldMap: React.FC<InteractiveFieldMapProps> = ({
             </div>
             <div className="text-right">
               <span className="text-xl font-black text-[#164A32]">
-                {activeMetric.avgProductivityTonHa.toFixed(2)}
+                {activeMetric.avgProductivityTonHa != null ? activeMetric.avgProductivityTonHa.toFixed(2) : '—'}
               </span>
               <span className="text-xs font-bold text-[#287A4A] ml-1">ton/ha</span>
             </div>
@@ -475,7 +475,9 @@ export const InteractiveFieldMap: React.FC<InteractiveFieldMapProps> = ({
                   <Sparkles className="w-3.5 h-3.5 text-[#287A4A]" />
                   Kehijauan Kanopi (NDVI)
                 </span>
-                <strong className="text-[#287A4A]">{activeMetric.avgNdvi.toFixed(3)}</strong>
+                <strong className="text-[#287A4A]">
+                  {activeMetric.avgNdvi != null ? activeMetric.avgNdvi.toFixed(3) : '—'}
+                </strong>
               </div>
               <div className="w-full h-2 bg-[#EDF4E5] rounded-full overflow-hidden">
                 <div
@@ -490,7 +492,9 @@ export const InteractiveFieldMap: React.FC<InteractiveFieldMapProps> = ({
                 <ThermometerSun className="w-3.5 h-3.5 text-[#D97706]" />
                 Suhu Permukaan (LST)
               </span>
-              <strong className="text-[#164A32]">{activeMetric.avgLst.toFixed(1)} °C</strong>
+              <strong className="text-[#164A32]">
+                {activeMetric.avgLst != null ? `${activeMetric.avgLst.toFixed(1)} °C` : '—'}
+              </strong>
             </div>
 
             <div className="flex items-center justify-between text-xs pt-1 border-t border-[#D8E3CC]/60">
@@ -499,7 +503,9 @@ export const InteractiveFieldMap: React.FC<InteractiveFieldMapProps> = ({
                 Curah Hujan Rata-rata
               </span>
               <strong className="text-[#164A32]">
-                {Math.round(activeMetric.avgRainfall).toLocaleString('id-ID')} mm
+                {activeMetric.avgRainfall != null
+                  ? `${Math.round(activeMetric.avgRainfall).toLocaleString('id-ID')} mm`
+                  : '—'}
               </strong>
             </div>
           </div>
@@ -525,13 +531,13 @@ export const InteractiveFieldMap: React.FC<InteractiveFieldMapProps> = ({
                       {MONTH_NAMES[(m.month - 1) % 12] || `Bln ${m.month}`}
                     </span>
                     <span className="text-[#5F7061]">
-                      NDVI <strong className="text-[#287A4A]">{m.ndvi.toFixed(2)}</strong>
+                      NDVI <strong className="text-[#287A4A]">{m.ndvi != null ? m.ndvi.toFixed(2) : '—'}</strong>
                     </span>
                     <span className="text-[#5F7061] hidden sm:inline">
-                      {m.lst.toFixed(1)}°C
+                      {m.lst != null ? `${m.lst.toFixed(1)}°C` : '—'}
                     </span>
                     <strong className="text-[#164A32] font-extrabold">
-                      {m.productivity.toFixed(2)} t/ha
+                      {m.productivity != null ? `${m.productivity.toFixed(2)} t/ha` : '—'}
                     </strong>
                   </div>
                 ))}

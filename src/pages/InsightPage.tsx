@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useFilter } from '../context/FilterContext';
+import { useModelRun } from '../context/ModelRunContext';
 import { apiService } from '../services/apiService';
 import { InsightData } from '../types';
 import { InteractiveFieldMap } from '../components/common/InteractiveFieldMap';
 import { 
+  AlertCircle,
   Lightbulb, 
   Award, 
   CheckCircle2,
@@ -19,26 +21,41 @@ import { Link } from 'react-router-dom';
 
 export const InsightPage: React.FC = () => {
   const { selectedRegion, setSelectedRegion, selectedYear, currentRegionName } = useFilter();
+  const { selectedRunId, selectedRun, loading: runsLoading, error: runsError } = useModelRun();
   const [data, setData] = useState<InsightData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loadedKey, setLoadedKey] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
+  const requestKey = `${selectedRunId || ''}:${selectedRegion}:${selectedYear}`;
 
   useEffect(() => {
-    let isMounted = true;
-    setIsLoading(true);
+    if (!selectedRunId) return;
+    let active = true;
+    setError(null);
 
-    apiService.getInsightData(selectedRegion, selectedYear).then((res) => {
-      if (isMounted) {
-        setData(res);
-        setIsLoading(false);
-      }
-    });
+    apiService
+      .getRunInsight(selectedRunId, selectedRegion, selectedYear)
+      .then((res) => {
+        if (active) {
+          setData(res);
+          setError(null);
+        }
+      })
+      .catch((reason) => {
+        if (active) {
+          setData(null);
+          setError(reason instanceof Error ? reason.message : 'Gagal memuat insight wilayah.');
+        }
+      })
+      .finally(() => {
+        if (active) setLoadedKey(requestKey);
+      });
 
     return () => {
-      isMounted = false;
+      active = false;
     };
-  }, [selectedRegion, selectedYear]);
+  }, [selectedRegion, selectedYear, selectedRunId, requestKey]);
 
-  if (isLoading || !data) {
+  if (selectedRunId ? loadedKey !== requestKey : runsLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
         <span className="w-8 h-8 border-3 border-[#287A4A] border-t-transparent rounded-full animate-spin" />
@@ -49,14 +66,25 @@ export const InsightPage: React.FC = () => {
     );
   }
 
+  if (error || !data || !selectedRun) {
+    return (
+      <div className="flex min-h-[400px] flex-col items-center justify-center gap-3 text-center text-sm text-[#5F7061]">
+        <AlertCircle className="h-7 w-7 text-amber-700" />
+        {error || runsError || 'Pilih run yang tersedia untuk melihat insight wilayah.'}
+      </div>
+    );
+  }
+
   const MONTH_LABELS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
   const ranking = data.regionalRanking || [];
   const activeRegionStat = ranking.find((r) => r.regionId === selectedRegion) || ranking[0];
   const topRegionStat = ranking[0];
-  const avgYieldDisplay = activeRegionStat ? activeRegionStat.avgProductivityTonHa.toFixed(2) : '—';
+  const avgYieldNum = activeRegionStat?.avgProductivityTonHa ?? data.averages.productivityTonHa;
+  const avgYieldDisplay = avgYieldNum != null ? avgYieldNum.toFixed(2) : '—';
 
   const monthly = data.monthlyObservations || [];
-  const sortedMonths = [...monthly].sort((a, b) => b.productivity - a.productivity);
+  const validMonthly = monthly.filter((m): m is typeof m & { productivity: number } => typeof m.productivity === 'number');
+  const sortedMonths = [...validMonthly].sort((a, b) => b.productivity - a.productivity);
   const bestMonth = sortedMonths[0];
   const lowestMonth = sortedMonths[sortedMonths.length - 1];
 
@@ -94,7 +122,7 @@ export const InsightPage: React.FC = () => {
             INSIGHT &amp; PETA LAHAN
           </h1>
           <span className="ml-auto text-xs font-bold text-[#287A4A] bg-[#EDF4E5] border border-[#C8DDAF] px-3 py-1 rounded-full hidden sm:inline">
-            Wilayah {currentRegionName} • {selectedYear}
+            {selectedRun.modelName} • {currentRegionName} • {selectedYear}
           </span>
         </div>
         <p className="text-xs sm:text-sm text-[#5F7061] max-w-3xl">
@@ -259,13 +287,16 @@ export const InsightPage: React.FC = () => {
                   <strong className="text-[#164A32]">{data.harvestCategory}</strong> dengan rata-rata{' '}
                   <strong className="text-[#164A32]">{avgYieldDisplay} ton/ha</strong>
                   {activeRegionStat ? ` (peringkat #${activeRegionStat.rank} di Bali)` : ''}.
-                  {topRegionStat && activeRegionStat && topRegionStat.regionId !== activeRegionStat.regionId && (
-                    <>
-                      {' '}Wilayah tertinggi tahun {selectedYear} adalah{' '}
-                      <strong className="text-[#164A32]">{topRegionStat.name}</strong>{' '}
-                      ({topRegionStat.avgProductivityTonHa.toFixed(2)} ton/ha).
-                    </>
-                  )}
+                  {topRegionStat &&
+                    activeRegionStat &&
+                    topRegionStat.regionId !== activeRegionStat.regionId &&
+                    topRegionStat.avgProductivityTonHa != null && (
+                      <>
+                        {' '}Wilayah tertinggi tahun {selectedYear} adalah{' '}
+                        <strong className="text-[#164A32]">{topRegionStat.name}</strong>{' '}
+                        ({topRegionStat.avgProductivityTonHa.toFixed(2)} ton/ha).
+                      </>
+                    )}
                 </>
               )}
             </p>
